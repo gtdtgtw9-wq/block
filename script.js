@@ -3,18 +3,18 @@
 
   /* ==================== 設定 ==================== */
   const STORAGE_KEY = 'blockKuzushiSave_v1';
-  const CLEAR_RATIO = 0.7;      // ステージクリアに必要なブロック破壊率
+  const CLEAR_RATIO = 0.95;     // ステージクリアに必要なブロック破壊率
   const MAX_LIFE = 3;
   const BALL_SPEED = 4.6;
   const SCORE_PER_BLOCK = 10;
 
   // ステージごとのブロック配置（行×列）。必要に応じて増やせる。
   const STAGES = [
-    { rows: 4, cols: 6 },
-    { rows: 5, cols: 6 },
-    { rows: 5, cols: 7 },
-    { rows: 6, cols: 7 },
-    { rows: 6, cols: 8 },
+    { rows: 7, cols: 8 },
+    { rows: 8, cols: 8 },
+    { rows: 8, cols: 9 },
+    { rows: 9, cols: 9 },
+    { rows: 10, cols: 10 },
   ];
 
   // カスタム画像が未設定のステージ用プレースホルダー配色
