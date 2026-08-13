@@ -134,7 +134,7 @@
 
   function layoutBlocks() {
     const cfg = STAGES[stageIndex];
-    const pad = 1.5;
+    const pad = 0; // ブロック間の隙間なし（検証用）
     const cols = cfg.cols, rows = cfg.rows;
     const bw = (blockAreaWidth - pad * (cols + 1)) / cols;
     const bh = (blockAreaHeight - pad * (rows + 1)) / rows;
@@ -245,9 +245,8 @@
       ctx.fillStyle = 'rgba(244, 242, 236, 0.92)';
       ctx.strokeStyle = 'rgba(12, 14, 20, 0.5)';
       ctx.lineWidth = 1;
-      roundRect(b.x, b.y, b.w, b.h, 4);
-      ctx.fill();
-      ctx.stroke();
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
       ctx.restore();
     }
 
