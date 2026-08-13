@@ -44,7 +44,7 @@
   let totalBlocks = 0, brokenBlocks = 0;
 
   let paddle = { x: 0, y: 0, w: 90, h: 14 };
-  let ball = { x: 0, y: 0, r: 7, vx: 0, vy: 0 };
+  let ball = { x: 0, y: 0, r: 7, vx: 0, vy: 0, slow: false };
 
   let life = MAX_LIFE;
   let score = 0;
@@ -175,12 +175,15 @@
     ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
     ball.vx = 0;
     ball.vy = 0;
+    ball.slow = false;
   }
 
   function launchBall() {
     const dir = Math.random() < 0.5 ? -1 : 1;
-    ball.vx = BALL_SPEED * 0.4 * dir;
-    ball.vy = -BALL_SPEED * 0.9;
+    // 発射直後は速度半分。最初にパドルへ跳ね返るまで維持する
+    ball.vx = BALL_SPEED * 0.4 * dir * 0.5;
+    ball.vy = -BALL_SPEED * 0.9 * 0.5;
+    ball.slow = true;
   }
 
   function goToNextStage() {
@@ -295,7 +298,12 @@
         ball.x >= paddle.x - paddle.w / 2 - ball.r &&
         ball.x <= paddle.x + paddle.w / 2 + ball.r) {
       const offset = (ball.x - paddle.x) / (paddle.w / 2); // -1 〜 1
-      const speed = Math.hypot(ball.vx, ball.vy);
+      let speed = Math.hypot(ball.vx, ball.vy);
+      if (ball.slow) {
+        // 最初のパドル反射で速度を通常に戻す
+        speed *= 2;
+        ball.slow = false;
+      }
       const angle = offset * (Math.PI / 3); // 最大60度
       ball.vx = speed * Math.sin(angle);
       ball.vy = -Math.abs(speed * Math.cos(angle));
