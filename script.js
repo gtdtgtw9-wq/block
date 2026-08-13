@@ -3,7 +3,7 @@
 
   /* ==================== 設定 ==================== */
   const STORAGE_KEY = 'blockKuzushiSave_v1';
-  const CLEAR_RATIO = 0.95;     // ステージクリアに必要なブロック破壊率
+  const CLEAR_RATIO = 1.0;      // ステージクリアに必要なブロック破壊率
   const MAX_LIFE = 3;
   const BALL_SPEED = 4.6;
   const SCORE_PER_BLOCK = 10;
@@ -12,11 +12,11 @@
 
   // ステージごとのブロック配置（行×列）。必要に応じて増やせる。
   const STAGES = [
-    { rows: 14, cols: 8 },
-    { rows: 16, cols: 8 },
-    { rows: 16, cols: 9 },
-    { rows: 18, cols: 9 },
-    { rows: 20, cols: 10 },
+    { rows: 42, cols: 8 },
+    { rows: 48, cols: 8 },
+    { rows: 48, cols: 9 },
+    { rows: 54, cols: 9 },
+    { rows: 60, cols: 10 },
   ];
 
   // カスタム画像が未設定のステージ用プレースホルダー配色
@@ -52,7 +52,6 @@
   let running = false;         // ボールが動いているか
   let dragging = false;
   let activePointerId = null;
-  let stageClearedOverride = false; // クリア演出中、画像を全開示するフラグ
 
   /* ==================== セーブデータ ==================== */
   function loadGame() {
@@ -161,7 +160,6 @@
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
-    stageClearedOverride = false;
     ensureStageImageLoaded(stageIndex);
     paddle.x = W / 2;
     resetBall();
@@ -228,7 +226,7 @@
     ctx.fillStyle = '#0c0e14';
     ctx.fillRect(0, 0, W, H);
 
-    const ratio = stageClearedOverride ? 1 : (totalBlocks ? brokenBlocks / totalBlocks : 0);
+    const ratio = totalBlocks ? brokenBlocks / totalBlocks : 0;
     const key = stageKey(stageIndex);
     const img = loadedImages[key];
 
@@ -356,7 +354,6 @@
 
   function onStageClear() {
     running = false;
-    stageClearedOverride = true;
     clearStageLabel.textContent = `ステージ ${stageIndex + 1} を突破しました`;
     showModal(clearModal);
     showTapHint(false);
@@ -554,9 +551,22 @@
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 50));
 
-  loadGame();
-  resize();
-  ensureStageImageLoaded(stageIndex);
-  resetStage(true);
-  requestAnimationFrame(loop);
+  function init() {
+    loadGame();
+    resize();
+    ensureStageImageLoaded(stageIndex);
+    resetStage(true);
+    // safe-area等の反映が1フレーム遅れる端末があるため、次フレームで再計測して位置を確定させる
+    requestAnimationFrame(() => {
+      resize();
+      resetStage(true);
+      requestAnimationFrame(loop);
+    });
+  }
+
+  if (document.readyState === 'complete') {
+    init();
+  } else {
+    window.addEventListener('load', init);
+  }
 })();
