@@ -6,6 +6,8 @@
   const CLEAR_RATIO = 1.0;      // ステージクリアに必要なブロック破壊率
   const MAX_LIFE = 3;
   const BALL_SPEED = 4.6;
+  const BALL_BASE_SPEED = Math.hypot(BALL_SPEED * 0.4, BALL_SPEED * 0.9); // 通常時の基準速度（大きさ）
+  const SPEED_RATIO_BONUS_MAX = 0.6; // 破壊率100%到達時点で基準速度に対し最大+60%
   const SCORE_PER_BLOCK = 10;
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
@@ -252,7 +254,7 @@
     for (const b of blocks) {
       if (!b.alive) continue;
       ctx.save();
-      ctx.fillStyle = 'rgba(244, 242, 236, 0.92)';
+      ctx.fillStyle = 'rgba(244, 242, 236, 1)';
       ctx.strokeStyle = 'rgba(12, 14, 20, 0.5)';
       ctx.lineWidth = 1;
       ctx.fillRect(b.x, b.y, b.w, b.h);
@@ -326,6 +328,17 @@
         brokenBlocks++;
         score += SCORE_PER_BLOCK;
         ball.vy *= -1;
+
+        // 破壊率に応じてボール速度を段階的に上昇させる
+        const ratioNow = brokenBlocks / totalBlocks;
+        const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
+        const curSpeed = Math.hypot(ball.vx, ball.vy);
+        if (curSpeed > 0) {
+          const scale = targetSpeed / curSpeed;
+          ball.vx *= scale;
+          ball.vy *= scale;
+        }
+
         updatePanel();
 
         if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
