@@ -6,7 +6,12 @@
   const CLEAR_RATIO = 1.0;      // ステージクリアに必要なブロック破壊率
   const MAX_LIFE = 3;
   const BALL_SPEED = 4.6;
+  const BALL_BASE_SPEED = Math.hypot(BALL_SPEED * 0.4, BALL_SPEED * 0.9); // 通常時の基準速度（大きさ）
+  const SPEED_RATIO_BONUS_MAX = 0.6; // 破壊率100%到達時点で基準速度に対し最大+60%
   const SCORE_PER_BLOCK = 10;
+  const ITEM_DROP_CHANCE = 0.08; // ブロック破壊時にアイテムが出現する確率
+  const ITEM_FALL_SPEED = 2.4;   // アイテムの落下速度(px/frame)
+  const ITEM_SIZE = 26;          // アイテムの描画サイズ(直径)
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
 
@@ -58,6 +63,8 @@
 
   let life = MAX_LIFE;
   let score = 0;
+
+  let items = []; // 落下中のアイテム { x, y, type }
 
   let running = false;         // ボールが動いているか
   let dragging = false;
@@ -170,6 +177,7 @@
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
+    items = [];
     ensureStageImageLoaded(stageIndex);
     paddle.x = W / 2;
     resetBall();
@@ -231,6 +239,25 @@
     ctx.restore();
   }
 
+  function drawItem(it) {
+    const r = ITEM_SIZE / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(it.x, it.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(224, 90, 90, 0.95)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(244, 242, 236, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f4f2ec';
+    ctx.font = 'bold 13px -apple-system, "Hiragino Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+1', it.x, it.y + 0.5);
+    ctx.restore();
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0c0e14';
@@ -252,12 +279,17 @@
     for (const b of blocks) {
       if (!b.alive) continue;
       ctx.save();
-      ctx.fillStyle = 'rgba(244, 242, 236, 0.92)';
+      ctx.fillStyle = 'rgba(244, 242, 236, 1)';
       ctx.strokeStyle = 'rgba(12, 14, 20, 0.5)';
       ctx.lineWidth = 1;
       ctx.fillRect(b.x, b.y, b.w, b.h);
       ctx.strokeRect(b.x, b.y, b.w, b.h);
       ctx.restore();
+    }
+
+    // アイテム
+    for (const it of items) {
+      drawItem(it);
     }
 
     // パドル
@@ -326,6 +358,26 @@
         brokenBlocks++;
         score += SCORE_PER_BLOCK;
         ball.vy *= -1;
+
+        // 一定確率でアイテムをその場に落下させる
+        if (Math.random() < ITEM_DROP_CHANCE) {
+          items.push({
+            x: b.x + b.w / 2,
+            y: b.y + b.h / 2,
+            type: 'life',
+          });
+        }
+
+        // 破壊率に応じてボール速度を段階的に上昇させる
+        const ratioNow = brokenBlocks / totalBlocks;
+        const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
+        const curSpeed = Math.hypot(ball.vx, ball.vy);
+        if (curSpeed > 0) {
+          const scale = targetSpeed / curSpeed;
+          ball.vx *= scale;
+          ball.vy *= scale;
+        }
+
         updatePanel();
 
         if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
@@ -345,6 +397,38 @@
         running = false;
         resetBall();
         showTapHint(true);
+      }
+    }
+
+    // アイテムの落下・キャッチ・画面外消失
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      it.y += ITEM_FALL_SPEED;
+
+      const half = ITEM_SIZE / 2;
+      const caught =
+        it.y + half >= paddle.y - paddle.h / 2 &&
+        it.y - half <= paddle.y + paddle.h / 2 &&
+        it.x >= paddle.x - paddle.w / 2 - half &&
+        it.x <= paddle.x + paddle.w / 2 + half;
+
+      if (caught) {
+        applyItemEffect(it.type);
+        items.splice(i, 1);
+        continue;
+      }
+
+      if (it.y - half > H) {
+        items.splice(i, 1); // キャッチできず画面外へ落下、何も起きない
+      }
+    }
+  }
+
+  function applyItemEffect(type) {
+    if (type === 'life') {
+      if (life < MAX_LIFE) {
+        life++;
+        updatePanel();
       }
     }
   }
