@@ -9,6 +9,21 @@
   const BALL_BASE_SPEED = Math.hypot(BALL_SPEED * 0.4, BALL_SPEED * 0.9); // 通常時の基準速度（大きさ）
   const SPEED_RATIO_BONUS_MAX = 0.6; // 破壊率100%到達時点で基準速度に対し最大+60%
   const SCORE_PER_BLOCK = 10;
+  const ITEM_FALL_SPEED = 2.4;   // アイテムの落下速度(px/frame)
+  const ITEM_SIZE = 26;          // アイテムの描画サイズ(直径)
+  const PADDLE_BASE_W = 90;          // パドルの基本幅
+  const PADDLE_EXPAND_MULT = 1.6;    // パドル拡大時の倍率
+  const PADDLE_EXPAND_DURATION = 8000; // パドル拡大の持続時間(ms)
+  const PIERCE_DURATION = 6000;      // 貫通ボールの持続時間(ms)
+  const BALL_RADIUS = 7;
+
+  // アイテム種類ごとの出現確率・見た目（ブロック破壊時にこの順で判定）
+  const ITEM_TYPES = {
+    life:   { chance: 0.001, color: 'rgba(224, 90, 90, 0.95)',  label: '+1' },
+    paddle: { chance: 0.03,  color: 'rgba(90, 150, 224, 0.95)', label: 'W+' },
+    multi:  { chance: 0.04,  color: 'rgba(110, 200, 140, 0.95)', label: '2x' },
+    pierce: { chance: 0.01,  color: 'rgba(224, 180, 90, 0.95)', label: '⚡' },
+  };
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
 
@@ -55,11 +70,15 @@
   let blockAreaTop = 0, blockAreaLeft = 0, blockAreaWidth = 0, blockAreaHeight = 0;
   let totalBlocks = 0, brokenBlocks = 0;
 
-  let paddle = { x: 0, y: 0, w: 90, h: 14 };
-  let ball = { x: 0, y: 0, r: 7, vx: 0, vy: 0, slow: false };
+  let paddle = { x: 0, y: 0, w: PADDLE_BASE_W, h: 14 };
+  let balls = []; // 複数ボール対応 { x, y, r, vx, vy, slow }
+  let paddleExpandUntil = 0; // performance.now()基準のタイムスタンプ
+  let pierceUntil = 0;       // performance.now()基準のタイムスタンプ
 
   let life = MAX_LIFE;
   let score = 0;
+
+  let items = []; // 落下中のアイテム { x, y, type }
 
   let running = false;         // ボールが動いているか
   let dragging = false;
@@ -172,6 +191,10 @@
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
+    items = [];
+    paddle.w = PADDLE_BASE_W;
+    paddleExpandUntil = 0;
+    pierceUntil = 0;
     ensureStageImageLoaded(stageIndex);
     paddle.x = W / 2;
     resetBall();
@@ -180,20 +203,21 @@
     updatePanel();
   }
 
+  function createBall(x, y) {
+    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false };
+  }
+
   function resetBall() {
-    ball.x = paddle.x;
-    ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
-    ball.vx = 0;
-    ball.vy = 0;
-    ball.slow = false;
+    balls = [createBall(paddle.x, paddle.y - paddle.h / 2 - BALL_RADIUS - 0.5)];
   }
 
   function launchBall() {
     const dir = Math.random() < 0.5 ? -1 : 1;
     // 発射直後は速度半分。最初にパドルへ跳ね返るまで維持する
-    ball.vx = BALL_SPEED * 0.4 * dir * 0.5;
-    ball.vy = -BALL_SPEED * 0.9 * 0.5;
-    ball.slow = true;
+    const b = balls[0];
+    b.vx = BALL_SPEED * 0.4 * dir * 0.5;
+    b.vy = -BALL_SPEED * 0.9 * 0.5;
+    b.slow = true;
   }
 
   function goToNextStage() {
@@ -233,6 +257,26 @@
     ctx.restore();
   }
 
+  function drawItem(it) {
+    const cfg = ITEM_TYPES[it.type] || ITEM_TYPES.life;
+    const r = ITEM_SIZE / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(it.x, it.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = cfg.color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(244, 242, 236, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f4f2ec';
+    ctx.font = 'bold 12px -apple-system, "Hiragino Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cfg.label, it.x, it.y + 0.5);
+    ctx.restore();
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0c0e14';
@@ -262,6 +306,11 @@
       ctx.restore();
     }
 
+    // アイテム
+    for (const it of items) {
+      drawItem(it);
+    }
+
     // パドル
     ctx.save();
     ctx.fillStyle = '#d97757';
@@ -272,9 +321,11 @@
     // ボール
     ctx.save();
     ctx.fillStyle = '#f4f2ec';
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-    ctx.fill();
+    for (const b of balls) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -289,67 +340,113 @@
   }
 
   /* ==================== 物理更新 ==================== */
+  function rollItemType() {
+    let r = Math.random();
+    for (const type in ITEM_TYPES) {
+      const chance = ITEM_TYPES[type].chance;
+      if (r < chance) return type;
+      r -= chance;
+    }
+    return null;
+  }
+
+  function spawnExtraBall() {
+    if (balls.length === 0) return;
+    const src = balls[0];
+    const speed = Math.hypot(src.vx, src.vy) || BALL_BASE_SPEED;
+    const angle = Math.atan2(src.vy, src.vx) + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 6);
+    balls.push({
+      x: src.x,
+      y: src.y,
+      r: BALL_RADIUS,
+      vx: speed * Math.cos(angle),
+      vy: speed * Math.sin(angle),
+      slow: false,
+    });
+  }
+
   function update() {
     if (!running) return;
+    const now = performance.now();
 
-    ball.x += ball.vx;
-    ball.y += ball.vy;
+    // パドル拡大：時間切れなら基本幅に戻す
+    paddle.w = (now < paddleExpandUntil) ? PADDLE_BASE_W * PADDLE_EXPAND_MULT : PADDLE_BASE_W;
+    const piercing = now < pierceUntil;
 
-    // 壁反射
-    if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-    if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-    if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const ball = balls[i];
+      ball.x += ball.vx;
+      ball.y += ball.vy;
 
-    // パドル反射
-    if (ball.vy > 0 &&
-        ball.y + ball.r >= paddle.y - paddle.h / 2 &&
-        ball.y - ball.r <= paddle.y + paddle.h / 2 &&
-        ball.x >= paddle.x - paddle.w / 2 - ball.r &&
-        ball.x <= paddle.x + paddle.w / 2 + ball.r) {
-      const offset = (ball.x - paddle.x) / (paddle.w / 2); // -1 〜 1
-      let speed = Math.hypot(ball.vx, ball.vy);
-      if (ball.slow) {
-        // 最初のパドル反射で速度を通常に戻す
-        speed *= 2;
-        ball.slow = false;
+      // 壁反射
+      if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+      if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+      if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
+
+      // パドル反射
+      if (ball.vy > 0 &&
+          ball.y + ball.r >= paddle.y - paddle.h / 2 &&
+          ball.y - ball.r <= paddle.y + paddle.h / 2 &&
+          ball.x >= paddle.x - paddle.w / 2 - ball.r &&
+          ball.x <= paddle.x + paddle.w / 2 + ball.r) {
+        const offset = (ball.x - paddle.x) / (paddle.w / 2); // -1 〜 1
+        let speed = Math.hypot(ball.vx, ball.vy);
+        if (ball.slow) {
+          // 最初のパドル反射で速度を通常に戻す
+          speed *= 2;
+          ball.slow = false;
+        }
+        const angle = offset * (Math.PI / 3); // 最大60度
+        ball.vx = speed * Math.sin(angle);
+        ball.vy = -Math.abs(speed * Math.cos(angle));
+        ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
       }
-      const angle = offset * (Math.PI / 3); // 最大60度
-      ball.vx = speed * Math.sin(angle);
-      ball.vy = -Math.abs(speed * Math.cos(angle));
-      ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
+
+      // ブロック衝突
+      for (const b of blocks) {
+        if (!b.alive) continue;
+        if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+            ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+          b.alive = false;
+          brokenBlocks++;
+          score += SCORE_PER_BLOCK;
+          if (!piercing) {
+            ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
+          }
+
+          // アイテム抽選（種類ごとの確率で1つだけ判定）
+          const dropType = rollItemType();
+          if (dropType) {
+            items.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, type: dropType });
+          }
+
+          // 破壊率に応じてボール速度を段階的に上昇させる
+          const ratioNow = brokenBlocks / totalBlocks;
+          const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
+          const curSpeed = Math.hypot(ball.vx, ball.vy);
+          if (curSpeed > 0) {
+            const scale = targetSpeed / curSpeed;
+            ball.vx *= scale;
+            ball.vy *= scale;
+          }
+
+          updatePanel();
+
+          if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
+            onStageClear();
+          }
+          break;
+        }
+      }
+
+      // 落下判定（このボールだけ配列から除去。他のボールが残っていればライフは減らさない）
+      if (ball.y - ball.r > H) {
+        balls.splice(i, 1);
+      }
     }
 
-    // ブロック衝突
-    for (const b of blocks) {
-      if (!b.alive) continue;
-      if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
-          ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
-        b.alive = false;
-        brokenBlocks++;
-        score += SCORE_PER_BLOCK;
-        ball.vy *= -1;
-
-        // 破壊率に応じてボール速度を段階的に上昇させる
-        const ratioNow = brokenBlocks / totalBlocks;
-        const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
-        const curSpeed = Math.hypot(ball.vx, ball.vy);
-        if (curSpeed > 0) {
-          const scale = targetSpeed / curSpeed;
-          ball.vx *= scale;
-          ball.vy *= scale;
-        }
-
-        updatePanel();
-
-        if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
-          onStageClear();
-        }
-        break;
-      }
-    }
-
-    // 落下判定
-    if (ball.y - ball.r > H) {
+    // 全ボールが画面外に落ちた場合のみライフを減らす
+    if (balls.length === 0) {
       life--;
       updatePanel();
       if (life <= 0) {
@@ -359,6 +456,44 @@
         resetBall();
         showTapHint(true);
       }
+    }
+
+    // アイテムの落下・キャッチ・画面外消失
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      it.y += ITEM_FALL_SPEED;
+
+      const half = ITEM_SIZE / 2;
+      const caught =
+        it.y + half >= paddle.y - paddle.h / 2 &&
+        it.y - half <= paddle.y + paddle.h / 2 &&
+        it.x >= paddle.x - paddle.w / 2 - half &&
+        it.x <= paddle.x + paddle.w / 2 + half;
+
+      if (caught) {
+        applyItemEffect(it.type);
+        items.splice(i, 1);
+        continue;
+      }
+
+      if (it.y - half > H) {
+        items.splice(i, 1); // キャッチできず画面外へ落下、何も起きない
+      }
+    }
+  }
+
+  function applyItemEffect(type) {
+    if (type === 'life') {
+      if (life < MAX_LIFE) {
+        life++;
+        updatePanel();
+      }
+    } else if (type === 'paddle') {
+      paddleExpandUntil = performance.now() + PADDLE_EXPAND_DURATION;
+    } else if (type === 'multi') {
+      spawnExtraBall();
+    } else if (type === 'pierce') {
+      pierceUntil = performance.now() + PIERCE_DURATION;
     }
   }
 
