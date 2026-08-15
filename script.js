@@ -159,7 +159,7 @@
     blockAreaLeft = (W - areaWidth) / 2;
 
     paddle.y = H - 64;
-    paddle.x = Math.min(Math.max(paddle.x, blockAreaLeft + paddle.w / 2), blockAreaLeft + blockAreaWidth - paddle.w / 2) || (blockAreaLeft + blockAreaWidth / 2);
+    paddle.x = Math.min(Math.max(paddle.x, paddle.w / 2), W - paddle.w / 2) || W / 2;
 
     layoutBlocks();
   }
@@ -197,7 +197,7 @@
     paddleExpandUntil = 0;
     pierceUntil = 0;
     ensureStageImageLoaded(stageIndex);
-    paddle.x = blockAreaLeft + blockAreaWidth / 2;
+    paddle.x = W / 2;
     resetBall();
     running = false;
     showTapHint(true);
@@ -280,20 +280,23 @@
 
   function drawFrame() {
     const rightX = blockAreaLeft + blockAreaWidth;
+    const bottomY = blockAreaTop + blockAreaHeight;
     ctx.save();
     ctx.fillStyle = '#1b1e29';
-    if (blockAreaLeft > 0) ctx.fillRect(0, 0, blockAreaLeft, H);
-    if (rightX < W) ctx.fillRect(rightX, 0, W - rightX, H);
+    // 左右の帯はブロックエリアの高さ範囲のみ（上端ラインより上、下端ラインより下には壁を設けない）
+    if (blockAreaLeft > 0) ctx.fillRect(0, blockAreaTop, blockAreaLeft, blockAreaHeight);
+    if (rightX < W) ctx.fillRect(rightX, blockAreaTop, W - rightX, blockAreaHeight);
+    // 上端の帯（画面上端からブロックエリア上端まで）
     if (blockAreaTop > 0) ctx.fillRect(blockAreaLeft, 0, blockAreaWidth, blockAreaTop);
 
     // 反射境界線（内側の縁を強調）
     ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(blockAreaLeft, 0);
-    ctx.lineTo(blockAreaLeft, H);
-    ctx.moveTo(rightX, 0);
-    ctx.lineTo(rightX, H);
+    ctx.moveTo(blockAreaLeft, blockAreaTop);
+    ctx.lineTo(blockAreaLeft, bottomY);
+    ctx.moveTo(rightX, blockAreaTop);
+    ctx.lineTo(rightX, bottomY);
     ctx.moveTo(blockAreaLeft, blockAreaTop);
     ctx.lineTo(rightX, blockAreaTop);
     ctx.stroke();
@@ -403,13 +406,14 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射（反射壁：ブロックエリアの左右・上端で反射する）
-      const wallLeft = blockAreaLeft;
-      const wallRight = blockAreaLeft + blockAreaWidth;
-      const wallTop = blockAreaTop;
+      // 壁反射（反射壁：ブロックエリアの上端で反射。左右はブロックエリアの高さ範囲内のみ有効）
+      const blockAreaBottom = blockAreaTop + blockAreaHeight;
+      const inBlockZone = ball.y < blockAreaBottom;
+      const wallLeft = inBlockZone ? blockAreaLeft : 0;
+      const wallRight = inBlockZone ? blockAreaLeft + blockAreaWidth : W;
       if (ball.x - ball.r < wallLeft) { ball.x = wallLeft + ball.r; ball.vx *= -1; }
       if (ball.x + ball.r > wallRight) { ball.x = wallRight - ball.r; ball.vx *= -1; }
-      if (ball.y - ball.r < wallTop) { ball.y = wallTop + ball.r; ball.vy *= -1; }
+      if (ball.y - ball.r < blockAreaTop) { ball.y = blockAreaTop + ball.r; ball.vy *= -1; }
 
       // パドル反射
       if (ball.vy > 0 &&
@@ -600,7 +604,7 @@
   canvas.addEventListener('pointercancel', endDrag);
 
   function clampPaddleX(x) {
-    return Math.min(Math.max(x, blockAreaLeft + paddle.w / 2), blockAreaLeft + blockAreaWidth - paddle.w / 2);
+    return Math.min(Math.max(x, paddle.w / 2), W - paddle.w / 2);
   }
 
   /* ==================== 情報パネル ==================== */
