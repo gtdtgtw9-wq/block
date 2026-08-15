@@ -26,6 +26,7 @@
   };
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
+  const FRAME_SIDE_WIDTH = 14; // 反射壁(左右)の最低幅(px)。ブロックエリア上端の反射壁高さは blockAreaTop を流用
 
   // ステージごとのブロック配置（行×列）。必要に応じて増やせる。
   const STAGES = [
@@ -147,7 +148,7 @@
 
     blockAreaTop = 64;
     const maxAreaHeight = H - blockAreaTop - MIN_PLAY_GAP; // パドル/ボール用の最低余白を確保
-    let areaWidth = W;
+    let areaWidth = W - FRAME_SIDE_WIDTH * 2; // 反射壁(左右)の最低幅を確保
     let areaHeight = areaWidth / IMAGE_ASPECT;
     if (areaHeight > maxAreaHeight) {
       areaHeight = maxAreaHeight;
@@ -158,7 +159,7 @@
     blockAreaLeft = (W - areaWidth) / 2;
 
     paddle.y = H - 64;
-    paddle.x = Math.min(Math.max(paddle.x, paddle.w / 2), W - paddle.w / 2) || W / 2;
+    paddle.x = Math.min(Math.max(paddle.x, blockAreaLeft + paddle.w / 2), blockAreaLeft + blockAreaWidth - paddle.w / 2) || (blockAreaLeft + blockAreaWidth / 2);
 
     layoutBlocks();
   }
@@ -196,7 +197,7 @@
     paddleExpandUntil = 0;
     pierceUntil = 0;
     ensureStageImageLoaded(stageIndex);
-    paddle.x = W / 2;
+    paddle.x = blockAreaLeft + blockAreaWidth / 2;
     resetBall();
     running = false;
     showTapHint(true);
@@ -277,10 +278,34 @@
     ctx.restore();
   }
 
+  function drawFrame() {
+    const rightX = blockAreaLeft + blockAreaWidth;
+    ctx.save();
+    ctx.fillStyle = '#1b1e29';
+    if (blockAreaLeft > 0) ctx.fillRect(0, 0, blockAreaLeft, H);
+    if (rightX < W) ctx.fillRect(rightX, 0, W - rightX, H);
+    if (blockAreaTop > 0) ctx.fillRect(blockAreaLeft, 0, blockAreaWidth, blockAreaTop);
+
+    // 反射境界線（内側の縁を強調）
+    ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(blockAreaLeft, 0);
+    ctx.lineTo(blockAreaLeft, H);
+    ctx.moveTo(rightX, 0);
+    ctx.lineTo(rightX, H);
+    ctx.moveTo(blockAreaLeft, blockAreaTop);
+    ctx.lineTo(rightX, blockAreaTop);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0c0e14';
     ctx.fillRect(0, 0, W, H);
+
+    drawFrame();
 
     const ratio = totalBlocks ? brokenBlocks / totalBlocks : 0;
     const key = stageKey(stageIndex);
@@ -378,10 +403,13 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射
-      if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-      if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-      if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
+      // 壁反射（反射壁：ブロックエリアの左右・上端で反射する）
+      const wallLeft = blockAreaLeft;
+      const wallRight = blockAreaLeft + blockAreaWidth;
+      const wallTop = blockAreaTop;
+      if (ball.x - ball.r < wallLeft) { ball.x = wallLeft + ball.r; ball.vx *= -1; }
+      if (ball.x + ball.r > wallRight) { ball.x = wallRight - ball.r; ball.vx *= -1; }
+      if (ball.y - ball.r < wallTop) { ball.y = wallTop + ball.r; ball.vy *= -1; }
 
       // パドル反射
       if (ball.vy > 0 &&
@@ -572,7 +600,7 @@
   canvas.addEventListener('pointercancel', endDrag);
 
   function clampPaddleX(x) {
-    return Math.min(Math.max(x, paddle.w / 2), W - paddle.w / 2);
+    return Math.min(Math.max(x, blockAreaLeft + paddle.w / 2), blockAreaLeft + blockAreaWidth - paddle.w / 2);
   }
 
   /* ==================== 情報パネル ==================== */
