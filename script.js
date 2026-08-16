@@ -27,6 +27,8 @@
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
   const FRAME_SIDE_WIDTH = 14; // 反射壁(左右)の最低幅(px)。ブロックエリア上端の反射壁高さは blockAreaTop を流用
+  const GAP_WIDTH = 28; // 反射壁の穴の幅(px)。ボール直径の2倍程度
+  const MAX_GAPS_BY_STAGE = [4, 3, 3, 3, 2, 2, 2, 1, 1, 1]; // ステージごとの穴の最大数(辺ごと)。進むほど減少
 
   // ステージごとのブロック配置（行×列）。必要に応じて増やせる。
   const STAGES = [
@@ -75,6 +77,7 @@
   let balls = []; // 複数ボール対応 { x, y, r, vx, vy, slow }
   let paddleExpandUntil = 0; // performance.now()基準のタイムスタンプ
   let pierceUntil = 0;       // performance.now()基準のタイムスタンプ
+  let topGaps = [], leftGaps = [], rightGaps = []; // 反射壁の穴 { start, end }（絶対座標）。ステージ開始時に再生成
 
   let life = MAX_LIFE;
   let score = 0;
@@ -189,6 +192,37 @@
   }
 
   /* ==================== ステージ制御 ==================== */
+  function generateGapsOnSegment(rangeStart, rangeEnd, count, gapWidth) {
+    // [rangeStart, rangeEnd] を count 個のゾーンに分割し、各ゾーン内にランダムな位置で穴を1つ配置する（重なり防止）
+    const length = rangeEnd - rangeStart;
+    const zoneLen = length / count;
+    const gaps = [];
+    for (let i = 0; i < count; i++) {
+      const zoneStart = rangeStart + i * zoneLen;
+      const maxOffset = Math.max(0, zoneLen - gapWidth);
+      const start = zoneStart + Math.random() * maxOffset;
+      gaps.push({ start, end: Math.min(start + gapWidth, rangeEnd) });
+    }
+    return gaps;
+  }
+
+  function generateWallGaps() {
+    const maxGaps = MAX_GAPS_BY_STAGE[Math.min(stageIndex, MAX_GAPS_BY_STAGE.length - 1)];
+    const rand = (max) => 1 + Math.floor(Math.random() * max); // 1〜max のランダムな穴の数
+    const rightX = blockAreaLeft + blockAreaWidth;
+    const blockAreaBottom = blockAreaTop + blockAreaHeight;
+    topGaps = generateGapsOnSegment(blockAreaLeft, rightX, rand(maxGaps), GAP_WIDTH);
+    leftGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
+    rightGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
+  }
+
+  function inGap(gaps, pos) {
+    for (const g of gaps) {
+      if (pos >= g.start && pos <= g.end) return true;
+    }
+    return false;
+  }
+
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
@@ -196,6 +230,7 @@
     paddle.w = PADDLE_BASE_W;
     paddleExpandUntil = 0;
     pierceUntil = 0;
+    generateWallGaps();
     ensureStageImageLoaded(stageIndex);
     paddle.x = W / 2;
     resetBall();
@@ -278,28 +313,65 @@
     ctx.restore();
   }
 
+  function complementSegments(rangeStart, rangeEnd, gaps) {
+    // gapsで指定された区間を除いた「壁が存在する」区間のリストを返す
+    const segments = [];
+    let cursor = rangeStart;
+    for (const g of gaps) {
+      if (g.start > cursor) segments.push({ start: cursor, end: g.start });
+      cursor = Math.max(cursor, g.end);
+    }
+    if (cursor < rangeEnd) segments.push({ start: cursor, end: rangeEnd });
+    return segments;
+  }
+
+  function drawVerticalBand(x, width, yStart, yEnd, gaps) {
+    for (const s of complementSegments(yStart, yEnd, gaps)) {
+      ctx.fillRect(x, s.start, width, s.end - s.start);
+    }
+  }
+
+  function drawHorizontalBand(y, height, xStart, xEnd, gaps) {
+    for (const s of complementSegments(xStart, xEnd, gaps)) {
+      ctx.fillRect(s.start, y, s.end - s.start, height);
+    }
+  }
+
+  function strokeVerticalLine(x, yStart, yEnd, gaps) {
+    ctx.beginPath();
+    for (const s of complementSegments(yStart, yEnd, gaps)) {
+      ctx.moveTo(x, s.start);
+      ctx.lineTo(x, s.end);
+    }
+    ctx.stroke();
+  }
+
+  function strokeHorizontalLine(y, xStart, xEnd, gaps) {
+    ctx.beginPath();
+    for (const s of complementSegments(xStart, xEnd, gaps)) {
+      ctx.moveTo(s.start, y);
+      ctx.lineTo(s.end, y);
+    }
+    ctx.stroke();
+  }
+
   function drawFrame() {
     const rightX = blockAreaLeft + blockAreaWidth;
     const bottomY = blockAreaTop + blockAreaHeight;
     ctx.save();
     ctx.fillStyle = '#1b1e29';
-    // 左右の帯はブロックエリアの高さ範囲のみ（上端ラインより上、下端ラインより下には壁を設けない）
-    if (blockAreaLeft > 0) ctx.fillRect(0, blockAreaTop, blockAreaLeft, blockAreaHeight);
-    if (rightX < W) ctx.fillRect(rightX, blockAreaTop, W - rightX, blockAreaHeight);
-    // 上端の帯（画面上端からブロックエリア上端まで）
-    if (blockAreaTop > 0) ctx.fillRect(blockAreaLeft, 0, blockAreaWidth, blockAreaTop);
+    // 左右の帯はブロックエリアの高さ範囲のみ（穴の位置は塗らずに開ける）
+    if (blockAreaLeft > 0) drawVerticalBand(0, blockAreaLeft, blockAreaTop, bottomY, leftGaps);
+    if (rightX < W) drawVerticalBand(rightX, W - rightX, blockAreaTop, bottomY, rightGaps);
+    // 上端の帯（画面上端からブロックエリア上端まで。穴の位置は塗らずに開ける）
+    if (blockAreaTop > 0) drawHorizontalBand(0, blockAreaTop, blockAreaLeft, rightX, topGaps);
 
-    // 反射境界線（内側の縁を強調）
+    // 反射境界線（内側の縁を強調。穴の位置は線を途切れさせる）
     ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(blockAreaLeft, blockAreaTop);
-    ctx.lineTo(blockAreaLeft, bottomY);
-    ctx.moveTo(rightX, blockAreaTop);
-    ctx.lineTo(rightX, bottomY);
-    ctx.moveTo(blockAreaLeft, blockAreaTop);
-    ctx.lineTo(rightX, blockAreaTop);
-    ctx.stroke();
+    strokeVerticalLine(blockAreaLeft, blockAreaTop, bottomY, leftGaps);
+    strokeVerticalLine(rightX, blockAreaTop, bottomY, rightGaps);
+    strokeHorizontalLine(blockAreaTop, blockAreaLeft, rightX, topGaps);
     ctx.restore();
   }
 
@@ -406,14 +478,15 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射（反射壁：ブロックエリアの上端で反射。左右はブロックエリアの高さ範囲内のみ有効）
+      // 壁反射（反射壁：ブロックエリアの上端・左右で反射。ただし穴の位置では画面端まで素通りする）
       const blockAreaBottom = blockAreaTop + blockAreaHeight;
       const inBlockZone = ball.y < blockAreaBottom;
-      const wallLeft = inBlockZone ? blockAreaLeft : 0;
-      const wallRight = inBlockZone ? blockAreaLeft + blockAreaWidth : W;
+      const wallLeft = (inBlockZone && !inGap(leftGaps, ball.y)) ? blockAreaLeft : 0;
+      const wallRight = (inBlockZone && !inGap(rightGaps, ball.y)) ? blockAreaLeft + blockAreaWidth : W;
+      const wallTopY = inGap(topGaps, ball.x) ? 0 : blockAreaTop;
       if (ball.x - ball.r < wallLeft) { ball.x = wallLeft + ball.r; ball.vx *= -1; }
       if (ball.x + ball.r > wallRight) { ball.x = wallRight - ball.r; ball.vx *= -1; }
-      if (ball.y - ball.r < blockAreaTop) { ball.y = blockAreaTop + ball.r; ball.vy *= -1; }
+      if (ball.y - ball.r < wallTopY) { ball.y = wallTopY + ball.r; ball.vy *= -1; }
 
       // パドル反射
       if (ball.vy > 0 &&
