@@ -520,9 +520,14 @@
           if (ball.x >= blockAreaLeft) { ball.outsideLeft = false; } // 自然に戻ってきたら内側状態へ復帰
         }
       } else {
-        // パドルゾーンでは壁は無効。ただし「外に出ていた」状態は実際のx座標に応じて維持する
-        if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-        ball.outsideLeft = ball.x < blockAreaLeft;
+        // パドルゾーンでは通常のボールに対して壁は無効（パドルが全幅動けるようにするため）
+        // ただし、既に穴を通過して外側にいるボールは、穴を経ずにこの境界を越えて内側へ戻れないようにする
+        if (ball.outsideLeft) {
+          if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+          if (ball.x + ball.r > blockAreaLeft) { ball.x = blockAreaLeft - ball.r; ball.vx *= -1; }
+        } else {
+          if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+        }
       }
 
       // 右壁（左壁と対称のロジック）
@@ -541,9 +546,14 @@
           if (ball.x <= rightX) { ball.outsideRight = false; }
         }
       } else {
-        // パドルゾーンでは壁は無効。ただし「外に出ていた」状態は実際のx座標に応じて維持する
-        if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-        ball.outsideRight = ball.x > rightX;
+        // パドルゾーンでは通常のボールに対して壁は無効（パドルが全幅動けるようにするため）
+        // ただし、既に穴を通過して外側にいるボールは、穴を経ずにこの境界を越えて内側へ戻れないようにする
+        if (ball.outsideRight) {
+          if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+          if (ball.x - ball.r < rightX) { ball.x = rightX + ball.r; ball.vx *= -1; }
+        } else {
+          if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+        }
       }
 
       // パドル反射
