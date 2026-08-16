@@ -524,7 +524,7 @@
         // ただし、既に穴を通過して外側にいるボールは、穴を経ずにこの境界を越えて内側へ戻れないようにする
         if (ball.outsideLeft) {
           if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-          if (ball.x + ball.r > blockAreaLeft) { ball.x = blockAreaLeft - ball.r; ball.vx *= -1; }
+          if (ball.x >= blockAreaLeft) { ball.x = blockAreaLeft - ball.r; ball.vx = -Math.abs(ball.vx); }
         } else {
           if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
         }
@@ -550,7 +550,7 @@
         // ただし、既に穴を通過して外側にいるボールは、穴を経ずにこの境界を越えて内側へ戻れないようにする
         if (ball.outsideRight) {
           if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-          if (ball.x - ball.r < rightX) { ball.x = rightX + ball.r; ball.vx *= -1; }
+          if (ball.x <= rightX) { ball.x = rightX + ball.r; ball.vx = Math.abs(ball.vx); }
         } else {
           if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
         }
