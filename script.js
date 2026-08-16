@@ -240,7 +240,7 @@
   }
 
   function createBall(x, y) {
-    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false };
+    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false, outsideLeft: false, outsideRight: false, outsideTop: false };
   }
 
   function resetBall() {
@@ -462,6 +462,9 @@
       vx: speed * Math.cos(angle),
       vy: speed * Math.sin(angle),
       slow: false,
+      outsideLeft: false,
+      outsideRight: false,
+      outsideTop: false,
     });
   }
 
@@ -478,15 +481,66 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射（反射壁：ブロックエリアの上端・左右で反射。ただし穴の位置では画面端まで素通りする）
+      // 壁反射（反射壁：ブロックエリアの上端・左右で反射。穴を通過した後は、
+      // 実際の画面端に当たるまで内側の壁を再度押し付けない＝一度外に出たボールを引き戻さない）
+      const rightX = blockAreaLeft + blockAreaWidth;
       const blockAreaBottom = blockAreaTop + blockAreaHeight;
-      const inBlockZone = ball.y < blockAreaBottom;
-      const wallLeft = (inBlockZone && !inGap(leftGaps, ball.y)) ? blockAreaLeft : 0;
-      const wallRight = (inBlockZone && !inGap(rightGaps, ball.y)) ? blockAreaLeft + blockAreaWidth : W;
-      const wallTopY = inGap(topGaps, ball.x) ? 0 : blockAreaTop;
-      if (ball.x - ball.r < wallLeft) { ball.x = wallLeft + ball.r; ball.vx *= -1; }
-      if (ball.x + ball.r > wallRight) { ball.x = wallRight - ball.r; ball.vx *= -1; }
-      if (ball.y - ball.r < wallTopY) { ball.y = wallTopY + ball.r; ball.vy *= -1; }
+      const inBlockHeight = ball.y < blockAreaBottom;
+
+      // 上壁
+      if (!ball.outsideTop) {
+        if (ball.y - ball.r < blockAreaTop) {
+          if (inGap(topGaps, ball.x)) {
+            ball.outsideTop = true; // 穴を通過。以後は画面端(y=0)でのみ止める
+          } else {
+            ball.y = blockAreaTop + ball.r;
+            ball.vy *= -1;
+          }
+        }
+      } else {
+        if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
+        if (ball.y >= blockAreaTop) { ball.outsideTop = false; } // 自然に戻ってきたら内側状態へ復帰
+      }
+
+      // 左壁（ブロックエリアの高さ範囲内でのみ有効）
+      if (inBlockHeight) {
+        if (!ball.outsideLeft) {
+          if (ball.x - ball.r < blockAreaLeft) {
+            if (inGap(leftGaps, ball.y)) {
+              ball.outsideLeft = true; // 穴を通過。以後は画面端(x=0)でのみ止める
+            } else {
+              ball.x = blockAreaLeft + ball.r;
+              ball.vx *= -1;
+            }
+          }
+        } else {
+          if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+          if (ball.x >= blockAreaLeft) { ball.outsideLeft = false; } // 自然に戻ってきたら内側状態へ復帰
+        }
+      } else {
+        ball.outsideLeft = false; // パドルゾーンでは壁は無効。状態もリセット
+        if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+      }
+
+      // 右壁（左壁と対称のロジック）
+      if (inBlockHeight) {
+        if (!ball.outsideRight) {
+          if (ball.x + ball.r > rightX) {
+            if (inGap(rightGaps, ball.y)) {
+              ball.outsideRight = true;
+            } else {
+              ball.x = rightX - ball.r;
+              ball.vx *= -1;
+            }
+          }
+        } else {
+          if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+          if (ball.x <= rightX) { ball.outsideRight = false; }
+        }
+      } else {
+        ball.outsideRight = false;
+        if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+      }
 
       // パドル反射
       if (ball.vy > 0 &&
