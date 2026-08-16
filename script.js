@@ -518,8 +518,9 @@
           if (ball.x >= blockAreaLeft) { ball.outsideLeft = false; } // 自然に戻ってきたら内側状態へ復帰
         }
       } else {
-        ball.outsideLeft = false; // パドルゾーンでは壁は無効。状態もリセット
+        // パドルゾーンでは壁は無効。ただし「外に出ていた」状態は実際のx座標に応じて維持する
         if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+        ball.outsideLeft = ball.x < blockAreaLeft;
       }
 
       // 右壁（左壁と対称のロジック）
@@ -538,8 +539,9 @@
           if (ball.x <= rightX) { ball.outsideRight = false; }
         }
       } else {
-        ball.outsideRight = false;
+        // パドルゾーンでは壁は無効。ただし「外に出ていた」状態は実際のx座標に応じて維持する
         if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+        ball.outsideRight = ball.x > rightX;
       }
 
       // パドル反射
