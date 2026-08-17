@@ -510,16 +510,16 @@
           if (ball.x - ball.r < blockAreaLeft) {
             if (inGap(leftGaps, ball.y)) {
               ball.outsideLeft = true; // 穴を通過。以後は画面端(x=0)でのみ止める
-            } else if (ball.x < blockAreaLeft) {
-              // パドルゾーンなどを経由してすでに中心座標が外側にある場合は、
-              // 内側へ押し戻さず外側に留める（通常のブロック攻略に戻さない）
+            } else if (ball.x < blockAreaLeft && ball.vx < 0) {
+              // パドルゾーンなどを経由してすでに中心座標が外側にあり、
+              // かつ外向きに動いている場合のみ、外側に留める（内側へ戻ろうとする向きなら通常通り入れる）
               ball.outsideLeft = true;
               ball.x = blockAreaLeft - ball.r;
               ball.vx = -Math.abs(ball.vx);
             } else {
-              // 内側から接触した通常の反射
+              // 内側から接触した通常の反射、または内側へ戻ろうとする向きでの侵入
               ball.x = blockAreaLeft + ball.r;
-              ball.vx *= -1;
+              ball.vx = Math.abs(ball.vx);
             }
           }
         } else {
@@ -549,15 +549,16 @@
           if (ball.x + ball.r > rightX) {
             if (inGap(rightGaps, ball.y)) {
               ball.outsideRight = true;
-            } else if (ball.x > rightX) {
-              // パドルゾーンなどを経由してすでに中心座標が外側にある場合は、
-              // 内側へ押し戻さず外側に留める（通常のブロック攻略に戻さない）
+            } else if (ball.x > rightX && ball.vx > 0) {
+              // パドルゾーンなどを経由してすでに中心座標が外側にあり、
+              // かつ外向きに動いている場合のみ、外側に留める（内側へ戻ろうとする向きなら通常通り入れる）
               ball.outsideRight = true;
               ball.x = rightX + ball.r;
               ball.vx = Math.abs(ball.vx);
             } else {
+              // 内側から接触した通常の反射、または内側へ戻ろうとする向きでの侵入
               ball.x = rightX - ball.r;
-              ball.vx *= -1;
+              ball.vx = -Math.abs(ball.vx);
             }
           }
         } else {
