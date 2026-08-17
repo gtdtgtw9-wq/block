@@ -592,40 +592,42 @@
         ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
       }
 
-      // ブロック衝突
-      for (const b of blocks) {
-        if (!b.alive) continue;
-        if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
-            ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
-          b.alive = false;
-          brokenBlocks++;
-          score += SCORE_PER_BLOCK;
-          if (!piercing) {
-            ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
-          }
+      // ブロック衝突（壁の外側にいるボールはブロックと接触しうる位置にいないため対象外）
+      if (!ball.outsideLeft && !ball.outsideRight && !ball.outsideTop) {
+        for (const b of blocks) {
+          if (!b.alive) continue;
+          if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+              ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+            b.alive = false;
+            brokenBlocks++;
+            score += SCORE_PER_BLOCK;
+            if (!piercing) {
+              ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
+            }
 
-          // アイテム抽選（種類ごとの確率で1つだけ判定）
-          const dropType = rollItemType();
-          if (dropType) {
-            items.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, type: dropType });
-          }
+            // アイテム抽選（種類ごとの確率で1つだけ判定）
+            const dropType = rollItemType();
+            if (dropType) {
+              items.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, type: dropType });
+            }
 
-          // 破壊率に応じてボール速度を段階的に上昇させる
-          const ratioNow = brokenBlocks / totalBlocks;
-          const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
-          const curSpeed = Math.hypot(ball.vx, ball.vy);
-          if (curSpeed > 0) {
-            const scale = targetSpeed / curSpeed;
-            ball.vx *= scale;
-            ball.vy *= scale;
-          }
+            // 破壊率に応じてボール速度を段階的に上昇させる
+            const ratioNow = brokenBlocks / totalBlocks;
+            const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
+            const curSpeed = Math.hypot(ball.vx, ball.vy);
+            if (curSpeed > 0) {
+              const scale = targetSpeed / curSpeed;
+              ball.vx *= scale;
+              ball.vy *= scale;
+            }
 
-          updatePanel();
+            updatePanel();
 
-          if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
-            onStageClear();
+            if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
+              onStageClear();
+            }
+            break;
           }
-          break;
         }
       }
 
