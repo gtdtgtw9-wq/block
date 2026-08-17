@@ -242,7 +242,7 @@
   }
 
   function createBall(x, y) {
-    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false, outsideLeft: false, outsideRight: false, outsideTop: false, inBlockHeightPrev: false };
+    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false, outsideLeft: false, outsideRight: false, outsideTop: false };
   }
 
   function resetBall() {
@@ -467,7 +467,6 @@
       outsideLeft: false,
       outsideRight: false,
       outsideTop: false,
-      inBlockHeightPrev: false,
     });
   }
 
@@ -506,15 +505,19 @@
       }
 
       // 左壁（ブロックエリアの高さ範囲内でのみ有効）
-      // パドルゾーンから高さ範囲へ「今まさに」再突入した瞬間かどうか
-      const enteringHeightZone = inBlockHeight && !ball.inBlockHeightPrev;
-
       if (inBlockHeight) {
         if (!ball.outsideLeft) {
           if (ball.x - ball.r < blockAreaLeft) {
             if (inGap(leftGaps, ball.y)) {
               ball.outsideLeft = true; // 穴を通過。以後は画面端(x=0)でのみ止める
+            } else if (ball.x < blockAreaLeft) {
+              // パドルゾーンなどを経由してすでに中心座標が外側にある場合は、
+              // 内側へ押し戻さず外側に留める（通常のブロック攻略に戻さない）
+              ball.outsideLeft = true;
+              ball.x = blockAreaLeft - ball.r;
+              ball.vx = -Math.abs(ball.vx);
             } else {
+              // 内側から接触した通常の反射
               ball.x = blockAreaLeft + ball.r;
               ball.vx *= -1;
             }
@@ -522,18 +525,18 @@
         } else {
           if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
           if (ball.x >= blockAreaLeft) {
-            if (enteringHeightZone && !inGap(leftGaps, ball.y)) {
-              // パドルゾーンを経由して、穴を通らずに境界を越えてきた→穴に居ないので押し戻す
+            if (inGap(leftGaps, ball.y)) {
+              ball.outsideLeft = false; // 穴の位置でのみ内側へ復帰
+            } else {
+              // 穴のない位置なので内側へは戻れない（壁は左右対称の実線）
               ball.x = blockAreaLeft - ball.r;
               ball.vx = -Math.abs(ball.vx);
-            } else {
-              ball.outsideLeft = false; // 自然に戻ってきたら内側状態へ復帰
             }
           }
         }
       }
       // パドルゾーンでは左右の壁は完全に無効（パドルが全幅動けるようにするため）。
-      // 外側にいるボールの状態はここでは一切変更せず、高さ範囲への再突入時にのみ判定する。
+      // 外側にいるボールの状態はここでは一切変更せず、高さ範囲へ戻った時点で改めて穴の判定を行う。
       // ただし画面の真の端（キャンバス端）は壁の有無に関わらず常に有効
       if (!inBlockHeight) {
         if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
@@ -546,6 +549,12 @@
           if (ball.x + ball.r > rightX) {
             if (inGap(rightGaps, ball.y)) {
               ball.outsideRight = true;
+            } else if (ball.x > rightX) {
+              // パドルゾーンなどを経由してすでに中心座標が外側にある場合は、
+              // 内側へ押し戻さず外側に留める（通常のブロック攻略に戻さない）
+              ball.outsideRight = true;
+              ball.x = rightX + ball.r;
+              ball.vx = Math.abs(ball.vx);
             } else {
               ball.x = rightX - ball.r;
               ball.vx *= -1;
@@ -554,17 +563,15 @@
         } else {
           if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
           if (ball.x <= rightX) {
-            if (enteringHeightZone && !inGap(rightGaps, ball.y)) {
+            if (inGap(rightGaps, ball.y)) {
+              ball.outsideRight = false;
+            } else {
               ball.x = rightX + ball.r;
               ball.vx = Math.abs(ball.vx);
-            } else {
-              ball.outsideRight = false;
             }
           }
         }
       }
-
-      ball.inBlockHeightPrev = inBlockHeight;
 
       // パドル反射
       if (ball.vy > 0 &&
