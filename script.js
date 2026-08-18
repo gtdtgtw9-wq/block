@@ -330,10 +330,10 @@
     if (ball.x + ball.r > left && ball.x - ball.r < right &&
         ball.y + ball.r > segStart && ball.y - ball.r < segEnd) {
       if (ball.x < wallX) {
-        ball.x = wallX - ball.r - WALL_BOUNCE_MARGIN;
+        ball.x = left - ball.r - WALL_BOUNCE_MARGIN;
         ball.vx = -Math.abs(ball.vx);
       } else {
-        ball.x = wallX + ball.r + WALL_BOUNCE_MARGIN;
+        ball.x = right + ball.r + WALL_BOUNCE_MARGIN;
         ball.vx = Math.abs(ball.vx);
       }
       return true;
@@ -348,10 +348,10 @@
     if (ball.y + ball.r > top && ball.y - ball.r < bottom &&
         ball.x + ball.r > segStart && ball.x - ball.r < segEnd) {
       if (ball.y < wallY) {
-        ball.y = wallY - ball.r - WALL_BOUNCE_MARGIN;
+        ball.y = top - ball.r - WALL_BOUNCE_MARGIN;
         ball.vy = -Math.abs(ball.vy);
       } else {
-        ball.y = wallY + ball.r + WALL_BOUNCE_MARGIN;
+        ball.y = bottom + ball.r + WALL_BOUNCE_MARGIN;
         ball.vy = Math.abs(ball.vy);
       }
       return true;
