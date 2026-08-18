@@ -16,7 +16,7 @@
   const PADDLE_EXPAND_DURATION = 8000; // パドル拡大の持続時間(ms)
   const PIERCE_DURATION = 6000;      // 貫通ボールの持続時間(ms)
   const BALL_RADIUS = 7;
-  const PADDLE_BOUNCE_MAX_ANGLE_DEG = 75; // パドル反射の最大角度(度)。パドル直近の壁穴への到達性を確保するため60度から引き上げ
+  const PADDLE_BOUNCE_MAX_ANGLE_DEG = 60; // パドル反射の最大角度(度)
   const PADDLE_BOUNCE_MAX_ANGLE = PADDLE_BOUNCE_MAX_ANGLE_DEG * Math.PI / 180;
 
   // アイテム種類ごとの出現確率・見た目（ブロック破壊時にこの順で判定）
