@@ -218,13 +218,6 @@
     rightGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
   }
 
-  function inGap(gaps, pos) {
-    for (const g of gaps) {
-      if (pos >= g.start && pos <= g.end) return true;
-    }
-    return false;
-  }
-
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
@@ -242,7 +235,7 @@
   }
 
   function createBall(x, y) {
-    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false, outsideLeft: false, outsideRight: false, outsideTop: false };
+    return { x, y, r: BALL_RADIUS, vx: 0, vy: 0, slow: false };
   }
 
   function resetBall() {
@@ -326,6 +319,46 @@
     if (cursor < rangeEnd) segments.push({ start: cursor, end: rangeEnd });
     return segments;
   }
+
+  const WALL_THICKNESS = 6; // 壁の当たり判定用の厚み（見た目のフレームとは別。境界線をまたぐ判定を安定させるため）
+  const WALL_BOUNCE_MARGIN = 0.05; // 跳ね返り位置に持たせる微小な余白（浮動小数点誤差によるブロックとの誤衝突防止）
+
+  function collideVerticalWall(ball, wallX, segStart, segEnd) {
+    // 左右の壁用：wallXを中心とした薄い壁に、ブロックと同様の単純な矩形衝突判定を行う
+    const left = wallX - WALL_THICKNESS / 2;
+    const right = wallX + WALL_THICKNESS / 2;
+    if (ball.x + ball.r > left && ball.x - ball.r < right &&
+        ball.y + ball.r > segStart && ball.y - ball.r < segEnd) {
+      if (ball.x < wallX) {
+        ball.x = wallX - ball.r - WALL_BOUNCE_MARGIN;
+        ball.vx = -Math.abs(ball.vx);
+      } else {
+        ball.x = wallX + ball.r + WALL_BOUNCE_MARGIN;
+        ball.vx = Math.abs(ball.vx);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function collideHorizontalWall(ball, wallY, segStart, segEnd) {
+    // 上壁用：wallYを中心とした薄い壁に、ブロックと同様の単純な矩形衝突判定を行う
+    const top = wallY - WALL_THICKNESS / 2;
+    const bottom = wallY + WALL_THICKNESS / 2;
+    if (ball.y + ball.r > top && ball.y - ball.r < bottom &&
+        ball.x + ball.r > segStart && ball.x - ball.r < segEnd) {
+      if (ball.y < wallY) {
+        ball.y = wallY - ball.r - WALL_BOUNCE_MARGIN;
+        ball.vy = -Math.abs(ball.vy);
+      } else {
+        ball.y = wallY + ball.r + WALL_BOUNCE_MARGIN;
+        ball.vy = Math.abs(ball.vy);
+      }
+      return true;
+    }
+    return false;
+  }
+
 
   function drawVerticalBand(x, width, yStart, yEnd, gaps) {
     for (const s of complementSegments(yStart, yEnd, gaps)) {
@@ -464,9 +497,6 @@
       vx: speed * Math.cos(angle),
       vy: speed * Math.sin(angle),
       slow: false,
-      outsideLeft: false,
-      outsideRight: false,
-      outsideTop: false,
     });
   }
 
@@ -483,96 +513,25 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射（反射壁：ブロックエリアの上端・左右で反射。穴を通過した後は、
-      // 実際の画面端に当たるまで内側の壁を再度押し付けない＝一度外に出たボールを引き戻さない）
+      // 壁反射（反射壁：ブロックと同じ「実体のある物体」として、穴のない区間にだけ当たり判定を持つ。
+      // 内側/外側の状態は持たず、毎フレームの位置だけで単純に当たったら跳ね返る）
       const rightX = blockAreaLeft + blockAreaWidth;
       const blockAreaBottom = blockAreaTop + blockAreaHeight;
-      const inBlockHeight = ball.y < blockAreaBottom;
 
-      // 上壁
-      if (!ball.outsideTop) {
-        if (ball.y - ball.r < blockAreaTop) {
-          if (inGap(topGaps, ball.x)) {
-            ball.outsideTop = true; // 穴を通過。以後は画面端(y=0)でのみ止める
-          } else {
-            ball.y = blockAreaTop + ball.r;
-            ball.vy *= -1;
-          }
-        }
-      } else {
-        if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
-        if (ball.y >= blockAreaTop) { ball.outsideTop = false; } // 自然に戻ってきたら内側状態へ復帰
+      for (const seg of complementSegments(blockAreaLeft, rightX, topGaps)) {
+        if (collideHorizontalWall(ball, blockAreaTop, seg.start, seg.end)) break;
+      }
+      for (const seg of complementSegments(blockAreaTop, blockAreaBottom, leftGaps)) {
+        if (collideVerticalWall(ball, blockAreaLeft, seg.start, seg.end)) break;
+      }
+      for (const seg of complementSegments(blockAreaTop, blockAreaBottom, rightGaps)) {
+        if (collideVerticalWall(ball, rightX, seg.start, seg.end)) break;
       }
 
-      // 左壁（ブロックエリアの高さ範囲内でのみ有効）
-      if (inBlockHeight) {
-        if (!ball.outsideLeft) {
-          if (ball.x - ball.r < blockAreaLeft) {
-            if (inGap(leftGaps, ball.y)) {
-              ball.outsideLeft = true; // 穴を通過。以後は画面端(x=0)でのみ止める
-            } else if (ball.x < blockAreaLeft && ball.vx < 0) {
-              // パドルゾーンなどを経由してすでに中心座標が外側にあり、
-              // かつ外向きに動いている場合のみ、外側に留める（内側へ戻ろうとする向きなら通常通り入れる）
-              ball.outsideLeft = true;
-              ball.x = blockAreaLeft - ball.r;
-              ball.vx = -Math.abs(ball.vx);
-            } else {
-              // 内側から接触した通常の反射、または内側へ戻ろうとする向きでの侵入
-              ball.x = blockAreaLeft + ball.r;
-              ball.vx = Math.abs(ball.vx);
-            }
-          }
-        } else {
-          if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-          if (ball.x >= blockAreaLeft) {
-            if (inGap(leftGaps, ball.y)) {
-              ball.outsideLeft = false; // 穴の位置でのみ内側へ復帰
-            } else {
-              // 穴のない位置なので内側へは戻れない（壁は左右対称の実線）
-              ball.x = blockAreaLeft - ball.r;
-              ball.vx = -Math.abs(ball.vx);
-            }
-          }
-        }
-      }
-      // パドルゾーンでは左右の壁は完全に無効（パドルが全幅動けるようにするため）。
-      // 外側にいるボールの状態はここでは一切変更せず、高さ範囲へ戻った時点で改めて穴の判定を行う。
-      // ただし画面の真の端（キャンバス端）は壁の有無に関わらず常に有効
-      if (!inBlockHeight) {
-        if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
-        if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-      }
-
-      // 右壁（左壁と対称のロジック）
-      if (inBlockHeight) {
-        if (!ball.outsideRight) {
-          if (ball.x + ball.r > rightX) {
-            if (inGap(rightGaps, ball.y)) {
-              ball.outsideRight = true;
-            } else if (ball.x > rightX && ball.vx > 0) {
-              // パドルゾーンなどを経由してすでに中心座標が外側にあり、
-              // かつ外向きに動いている場合のみ、外側に留める（内側へ戻ろうとする向きなら通常通り入れる）
-              ball.outsideRight = true;
-              ball.x = rightX + ball.r;
-              ball.vx = Math.abs(ball.vx);
-            } else {
-              // 内側から接触した通常の反射、または内側へ戻ろうとする向きでの侵入
-              ball.x = rightX - ball.r;
-              ball.vx = -Math.abs(ball.vx);
-            }
-          }
-        } else {
-          if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
-          if (ball.x <= rightX) {
-            if (inGap(rightGaps, ball.y)) {
-              ball.outsideRight = false;
-            } else {
-              ball.x = rightX + ball.r;
-              ball.vx = Math.abs(ball.vx);
-            }
-          }
-        }
-      }
+      // 画面の真の端（キャンバス端）は壁の有無に関わらず常に有効
+      if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
+      if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
+      if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
 
       // パドル反射
       if (ball.vy > 0 &&
@@ -593,9 +552,8 @@
         ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
       }
 
-      // ブロック衝突（壁の外側にいるボールはブロックと接触しうる位置にいないため対象外）
-      if (!ball.outsideLeft && !ball.outsideRight && !ball.outsideTop) {
-        for (const b of blocks) {
+      // ブロック衝突
+      for (const b of blocks) {
           if (!b.alive) continue;
           if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
               ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
@@ -630,7 +588,6 @@
             break;
           }
         }
-      }
 
       // 落下判定（このボールだけ配列から除去。他のボールが残っていればライフは減らさない）
       if (ball.y - ball.r > H) {
