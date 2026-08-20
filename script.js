@@ -420,10 +420,12 @@
     // 帯（フレーム）の背景：マット画像は帯ごとに個別クロップせず、
     // 「下敷き」として画像1枚をフレーム全体の外接矩形(0,0,W,bottomY)に対して1回だけcover計算し、
     // 上・左・右の帯はその同じ絵を覗く窓として描画する。穴の位置も含めて全面を塗る（穴を視覚的に途切れさせない）
+    // 左右の帯は画面上端(y=0)から、上の帯は画面幅いっぱい(x=0〜W)から描画し、
+    // 左上・右上のコーナー（上帯と左右帯の交差部分）も画像/単色で覆う（重なりはPath2D上で問題なし）
     const bandPath = new Path2D();
-    if (blockAreaLeft > 0) bandPath.rect(0, blockAreaTop, blockAreaLeft, bottomY - blockAreaTop);
-    if (rightX < W) bandPath.rect(rightX, blockAreaTop, W - rightX, bottomY - blockAreaTop);
-    if (blockAreaTop > 0) bandPath.rect(blockAreaLeft, 0, rightX - blockAreaLeft, blockAreaTop);
+    if (blockAreaLeft > 0) bandPath.rect(0, 0, blockAreaLeft, bottomY);
+    if (rightX < W) bandPath.rect(rightX, 0, W - rightX, bottomY);
+    if (blockAreaTop > 0) bandPath.rect(0, 0, W, blockAreaTop);
 
     ctx.save();
     ctx.clip(bandPath);
@@ -434,6 +436,11 @@
       ctx.fillStyle = '#1b1e29';
       ctx.fillRect(0, 0, W, bottomY);
     }
+    // 穴の区間だけ暗くして、開口部（ボールが通過できる位置）であることを視覚的に強調する
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    for (const g of leftGaps) ctx.fillRect(0, g.start, blockAreaLeft, g.end - g.start);
+    for (const g of rightGaps) ctx.fillRect(rightX, g.start, W - rightX, g.end - g.start);
+    for (const g of topGaps) ctx.fillRect(g.start, 0, g.end - g.start, blockAreaTop);
     ctx.restore();
 
     // 反射境界線（内側の縁を強調。こちらは従来通り、穴の位置で線を途切れさせる＝壁の実体位置の視覚的な手がかりとして維持）
