@@ -16,6 +16,8 @@
   const PADDLE_EXPAND_DURATION = 8000; // パドル拡大の持続時間(ms)
   const PIERCE_DURATION = 6000;      // 貫通ボールの持続時間(ms)
   const BALL_RADIUS = 7;
+  const PADDLE_BOUNCE_MAX_ANGLE_DEG = 60; // パドル反射の最大角度(度)
+  const PADDLE_BOUNCE_MAX_ANGLE = PADDLE_BOUNCE_MAX_ANGLE_DEG * Math.PI / 180;
 
   // アイテム種類ごとの出現確率・見た目（ブロック破壊時にこの順で判定）
   const ITEM_TYPES = {
@@ -26,6 +28,9 @@
   };
   const IMAGE_ASPECT = 768 / 1280; // 差し込み画像の縦横比（幅/高さ）
   const MIN_PLAY_GAP = 140; // ブロックエリア下端からパドルまでの最低プレイスペース(px)
+  const FRAME_SIDE_WIDTH = 14; // 反射壁(左右)の最低幅(px)。ブロックエリア上端の反射壁高さは blockAreaTop を流用
+  const GAP_WIDTH = 28; // 反射壁の穴の幅(px)。ボール直径の2倍程度
+  const MAX_GAPS_BY_STAGE = [4, 3, 3, 3, 2, 2, 2, 1, 1, 1]; // ステージごとの穴の最大数(辺ごと)。進むほど減少
 
   // ステージごとのブロック配置（行×列）。必要に応じて増やせる。
   const STAGES = [
@@ -65,6 +70,8 @@
   let stageIndex = 0;          // 0-indexed
   let images = {};             // { stage1: dataURL, ... }
   let loadedImages = {};       // { stage1: HTMLImageElement }
+  let matImages = {};          // { mat1: dataURL, ... } 周辺部（マット）用画像
+  let loadedMatImages = {};    // { mat1: HTMLImageElement }
 
   let blocks = [];
   let blockAreaTop = 0, blockAreaLeft = 0, blockAreaWidth = 0, blockAreaHeight = 0;
@@ -74,6 +81,7 @@
   let balls = []; // 複数ボール対応 { x, y, r, vx, vy, slow }
   let paddleExpandUntil = 0; // performance.now()基準のタイムスタンプ
   let pierceUntil = 0;       // performance.now()基準のタイムスタンプ
+  let topGaps = [], leftGaps = [], rightGaps = []; // 反射壁の穴 { start, end }（絶対座標）。ステージ開始時に再生成
 
   let life = MAX_LIFE;
   let score = 0;
@@ -96,6 +104,9 @@
       if (data.images && typeof data.images === 'object') {
         images = data.images;
       }
+      if (data.matImages && typeof data.matImages === 'object') {
+        matImages = data.matImages;
+      }
     } catch (e) {
       console.warn('セーブデータの読み込みに失敗しました', e);
     }
@@ -103,7 +114,7 @@
 
   function saveGame() {
     try {
-      const data = { currentStage: stageIndex + 1, images };
+      const data = { currentStage: stageIndex + 1, images, matImages };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
       console.warn('セーブデータの保存に失敗しました', e);
@@ -121,8 +132,18 @@
     saveGame();
   }
 
+  function resetAllMatImages() {
+    matImages = {};
+    loadedMatImages = {};
+    saveGame();
+  }
+
   function stageKey(idx) {
     return 'stage' + (idx + 1);
+  }
+
+  function matKey(idx) {
+    return 'mat' + (idx + 1);
   }
 
   function ensureStageImageLoaded(idx) {
@@ -132,6 +153,16 @@
     if (!src) return;
     const img = new Image();
     img.onload = () => { loadedImages[key] = img; };
+    img.src = src;
+  }
+
+  function ensureMatImageLoaded(idx) {
+    const key = matKey(idx);
+    if (loadedMatImages[key]) return;
+    const src = matImages[key];
+    if (!src) return;
+    const img = new Image();
+    img.onload = () => { loadedMatImages[key] = img; };
     img.src = src;
   }
 
@@ -147,7 +178,7 @@
 
     blockAreaTop = 64;
     const maxAreaHeight = H - blockAreaTop - MIN_PLAY_GAP; // パドル/ボール用の最低余白を確保
-    let areaWidth = W;
+    let areaWidth = W - FRAME_SIDE_WIDTH * 2; // 反射壁(左右)の最低幅を確保
     let areaHeight = areaWidth / IMAGE_ASPECT;
     if (areaHeight > maxAreaHeight) {
       areaHeight = maxAreaHeight;
@@ -188,6 +219,30 @@
   }
 
   /* ==================== ステージ制御 ==================== */
+  function generateGapsOnSegment(rangeStart, rangeEnd, count, gapWidth) {
+    // [rangeStart, rangeEnd] を count 個のゾーンに分割し、各ゾーン内にランダムな位置で穴を1つ配置する（重なり防止）
+    const length = rangeEnd - rangeStart;
+    const zoneLen = length / count;
+    const gaps = [];
+    for (let i = 0; i < count; i++) {
+      const zoneStart = rangeStart + i * zoneLen;
+      const maxOffset = Math.max(0, zoneLen - gapWidth);
+      const start = zoneStart + Math.random() * maxOffset;
+      gaps.push({ start, end: Math.min(start + gapWidth, rangeEnd) });
+    }
+    return gaps;
+  }
+
+  function generateWallGaps() {
+    const maxGaps = MAX_GAPS_BY_STAGE[Math.min(stageIndex, MAX_GAPS_BY_STAGE.length - 1)];
+    const rand = (max) => 1 + Math.floor(Math.random() * max); // 1〜max のランダムな穴の数
+    const rightX = blockAreaLeft + blockAreaWidth;
+    const blockAreaBottom = blockAreaTop + blockAreaHeight;
+    topGaps = generateGapsOnSegment(blockAreaLeft, rightX, rand(maxGaps), GAP_WIDTH);
+    leftGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
+    rightGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
+  }
+
   function resetStage(fullReset) {
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
@@ -195,7 +250,9 @@
     paddle.w = PADDLE_BASE_W;
     paddleExpandUntil = 0;
     pierceUntil = 0;
+    generateWallGaps();
     ensureStageImageLoaded(stageIndex);
+    ensureMatImageLoaded(stageIndex);
     paddle.x = W / 2;
     resetBall();
     running = false;
@@ -277,10 +334,146 @@
     ctx.restore();
   }
 
+  function complementSegments(rangeStart, rangeEnd, gaps) {
+    // gapsで指定された区間を除いた「壁が存在する」区間のリストを返す
+    const segments = [];
+    let cursor = rangeStart;
+    for (const g of gaps) {
+      if (g.start > cursor) segments.push({ start: cursor, end: g.start });
+      cursor = Math.max(cursor, g.end);
+    }
+    if (cursor < rangeEnd) segments.push({ start: cursor, end: rangeEnd });
+    return segments;
+  }
+
+  const WALL_THICKNESS = 6; // 壁の当たり判定用の厚み（見た目のフレームとは別。境界線をまたぐ判定を安定させるため）
+  const WALL_BOUNCE_MARGIN = 0.05; // 跳ね返り位置に持たせる微小な余白（浮動小数点誤差によるブロックとの誤衝突防止）
+
+  function collideVerticalWall(ball, wallX, segStart, segEnd) {
+    // 左右の壁用：wallXを中心とした薄い壁に、ブロックと同様の単純な矩形衝突判定を行う
+    const left = wallX - WALL_THICKNESS / 2;
+    const right = wallX + WALL_THICKNESS / 2;
+    if (ball.x + ball.r > left && ball.x - ball.r < right &&
+        ball.y + ball.r > segStart && ball.y - ball.r < segEnd) {
+      if (ball.x < wallX) {
+        ball.x = left - ball.r - WALL_BOUNCE_MARGIN;
+        ball.vx = -Math.abs(ball.vx);
+      } else {
+        ball.x = right + ball.r + WALL_BOUNCE_MARGIN;
+        ball.vx = Math.abs(ball.vx);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function collideHorizontalWall(ball, wallY, segStart, segEnd) {
+    // 上壁用：wallYを中心とした薄い壁に、ブロックと同様の単純な矩形衝突判定を行う
+    const top = wallY - WALL_THICKNESS / 2;
+    const bottom = wallY + WALL_THICKNESS / 2;
+    if (ball.y + ball.r > top && ball.y - ball.r < bottom &&
+        ball.x + ball.r > segStart && ball.x - ball.r < segEnd) {
+      if (ball.y < wallY) {
+        ball.y = top - ball.r - WALL_BOUNCE_MARGIN;
+        ball.vy = -Math.abs(ball.vy);
+      } else {
+        ball.y = bottom + ball.r + WALL_BOUNCE_MARGIN;
+        ball.vy = Math.abs(ball.vy);
+      }
+      return true;
+    }
+    return false;
+  }
+
+
+  function clipToSegmentsVertical(x, width, segments) {
+    const path = new Path2D();
+    for (const s of segments) {
+      path.rect(x, s.start, width, s.end - s.start);
+    }
+    ctx.clip(path);
+  }
+
+  function clipToSegmentsHorizontal(y, height, segments) {
+    const path = new Path2D();
+    for (const s of segments) {
+      path.rect(s.start, y, s.end - s.start, height);
+    }
+    ctx.clip(path);
+  }
+
+  function drawVerticalBandMat(x, width, yStart, yEnd, gaps, matImg, idx) {
+    const segments = complementSegments(yStart, yEnd, gaps);
+    if (segments.length === 0) return;
+    ctx.save();
+    clipToSegmentsVertical(x, width, segments);
+    if (matImg) {
+      drawImageCover(matImg, x, yStart, width, yEnd - yStart, 1);
+    } else {
+      ctx.fillStyle = '#1b1e29';
+      ctx.fillRect(x, yStart, width, yEnd - yStart);
+    }
+    ctx.restore();
+  }
+
+  function drawHorizontalBandMat(y, height, xStart, xEnd, gaps, matImg, idx) {
+    const segments = complementSegments(xStart, xEnd, gaps);
+    if (segments.length === 0) return;
+    ctx.save();
+    clipToSegmentsHorizontal(y, height, segments);
+    if (matImg) {
+      drawImageCover(matImg, xStart, y, xEnd - xStart, height, 1);
+    } else {
+      ctx.fillStyle = '#1b1e29';
+      ctx.fillRect(xStart, y, xEnd - xStart, height);
+    }
+    ctx.restore();
+  }
+
+  function strokeVerticalLine(x, yStart, yEnd, gaps) {
+    ctx.beginPath();
+    for (const s of complementSegments(yStart, yEnd, gaps)) {
+      ctx.moveTo(x, s.start);
+      ctx.lineTo(x, s.end);
+    }
+    ctx.stroke();
+  }
+
+  function strokeHorizontalLine(y, xStart, xEnd, gaps) {
+    ctx.beginPath();
+    for (const s of complementSegments(xStart, xEnd, gaps)) {
+      ctx.moveTo(s.start, y);
+      ctx.lineTo(s.end, y);
+    }
+    ctx.stroke();
+  }
+
+  function drawFrame() {
+    const rightX = blockAreaLeft + blockAreaWidth;
+    const bottomY = blockAreaTop + blockAreaHeight;
+    const matImg = loadedMatImages[matKey(stageIndex)];
+    ctx.save();
+    // 左右の帯はブロックエリアの高さ範囲のみ（穴の位置は塗らずに開ける）。マット画像があればそれを敷き、なければ単色
+    if (blockAreaLeft > 0) drawVerticalBandMat(0, blockAreaLeft, blockAreaTop, bottomY, leftGaps, matImg, stageIndex);
+    if (rightX < W) drawVerticalBandMat(rightX, W - rightX, blockAreaTop, bottomY, rightGaps, matImg, stageIndex);
+    // 上端の帯（画面上端からブロックエリア上端まで。穴の位置は塗らずに開ける）
+    if (blockAreaTop > 0) drawHorizontalBandMat(0, blockAreaTop, blockAreaLeft, rightX, topGaps, matImg, stageIndex);
+
+    // 反射境界線（内側の縁を強調。穴の位置は線を途切れさせる）
+    ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
+    ctx.lineWidth = 2;
+    strokeVerticalLine(blockAreaLeft, blockAreaTop, bottomY, leftGaps);
+    strokeVerticalLine(rightX, blockAreaTop, bottomY, rightGaps);
+    strokeHorizontalLine(blockAreaTop, blockAreaLeft, rightX, topGaps);
+    ctx.restore();
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0c0e14';
     ctx.fillRect(0, 0, W, H);
+
+    drawFrame();
 
     const ratio = totalBlocks ? brokenBlocks / totalBlocks : 0;
     const key = stageKey(stageIndex);
@@ -378,7 +571,22 @@
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // 壁反射
+      // 壁反射（反射壁：ブロックと同じ「実体のある物体」として、穴のない区間にだけ当たり判定を持つ。
+      // 内側/外側の状態は持たず、毎フレームの位置だけで単純に当たったら跳ね返る）
+      const rightX = blockAreaLeft + blockAreaWidth;
+      const blockAreaBottom = blockAreaTop + blockAreaHeight;
+
+      for (const seg of complementSegments(blockAreaLeft, rightX, topGaps)) {
+        if (collideHorizontalWall(ball, blockAreaTop, seg.start, seg.end)) break;
+      }
+      for (const seg of complementSegments(blockAreaTop, blockAreaBottom, leftGaps)) {
+        if (collideVerticalWall(ball, blockAreaLeft, seg.start, seg.end)) break;
+      }
+      for (const seg of complementSegments(blockAreaTop, blockAreaBottom, rightGaps)) {
+        if (collideVerticalWall(ball, rightX, seg.start, seg.end)) break;
+      }
+
+      // 画面の真の端（キャンバス端）は壁の有無に関わらず常に有効
       if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; }
       if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; }
       if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy *= -1; }
@@ -396,7 +604,7 @@
           speed *= 2;
           ball.slow = false;
         }
-        const angle = offset * (Math.PI / 3); // 最大60度
+        const angle = offset * PADDLE_BOUNCE_MAX_ANGLE;
         ball.vx = speed * Math.sin(angle);
         ball.vy = -Math.abs(speed * Math.cos(angle));
         ball.y = paddle.y - paddle.h / 2 - ball.r - 0.5;
@@ -404,40 +612,40 @@
 
       // ブロック衝突
       for (const b of blocks) {
-        if (!b.alive) continue;
-        if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
-            ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
-          b.alive = false;
-          brokenBlocks++;
-          score += SCORE_PER_BLOCK;
-          if (!piercing) {
-            ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
-          }
+          if (!b.alive) continue;
+          if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+              ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+            b.alive = false;
+            brokenBlocks++;
+            score += SCORE_PER_BLOCK;
+            if (!piercing) {
+              ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
+            }
 
-          // アイテム抽選（種類ごとの確率で1つだけ判定）
-          const dropType = rollItemType();
-          if (dropType) {
-            items.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, type: dropType });
-          }
+            // アイテム抽選（種類ごとの確率で1つだけ判定）
+            const dropType = rollItemType();
+            if (dropType) {
+              items.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, type: dropType });
+            }
 
-          // 破壊率に応じてボール速度を段階的に上昇させる
-          const ratioNow = brokenBlocks / totalBlocks;
-          const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
-          const curSpeed = Math.hypot(ball.vx, ball.vy);
-          if (curSpeed > 0) {
-            const scale = targetSpeed / curSpeed;
-            ball.vx *= scale;
-            ball.vy *= scale;
-          }
+            // 破壊率に応じてボール速度を段階的に上昇させる
+            const ratioNow = brokenBlocks / totalBlocks;
+            const targetSpeed = BALL_BASE_SPEED * (1 + SPEED_RATIO_BONUS_MAX * ratioNow) * (ball.slow ? 0.5 : 1);
+            const curSpeed = Math.hypot(ball.vx, ball.vy);
+            if (curSpeed > 0) {
+              const scale = targetSpeed / curSpeed;
+              ball.vx *= scale;
+              ball.vy *= scale;
+            }
 
-          updatePanel();
+            updatePanel();
 
-          if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
-            onStageClear();
+            if (brokenBlocks / totalBlocks >= CLEAR_RATIO) {
+              onStageClear();
+            }
+            break;
           }
-          break;
         }
-      }
 
       // 落下判定（このボールだけ配列から除去。他のボールが残っていればライフは減らさない）
       if (ball.y - ball.r > H) {
@@ -587,6 +795,9 @@
   const resetImagesBtn = document.getElementById('resetImagesBtn');
   const imageInput = document.getElementById('imageInput');
   const stageImageList = document.getElementById('stageImageList');
+  const resetMatImagesBtn = document.getElementById('resetMatImagesBtn');
+  const matImageInput = document.getElementById('matImageInput');
+  const matImageList = document.getElementById('matImageList');
 
   function updatePanel() {
     panelStage.textContent = String(stageIndex + 1);
@@ -597,6 +808,7 @@
   function openPanel() {
     updatePanel();
     renderStageImageList();
+    renderMatImageList();
     panel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');
     running = false;
@@ -624,6 +836,14 @@
     resetAllImages();
     ensureStageImageLoaded(stageIndex);
     renderStageImageList();
+  });
+
+  resetMatImagesBtn.addEventListener('click', () => {
+    const ok = window.confirm('設定した周辺装飾（マット）画像をすべて削除します（ステージ進行はそのまま残ります）。よろしいですか？');
+    if (!ok) return;
+    resetAllMatImages();
+    ensureMatImageLoaded(stageIndex);
+    renderMatImageList();
   });
 
   /* ==================== 画像差し替え(全ステージ分) ==================== */
@@ -691,6 +911,71 @@
     imageInput.value = '';
   });
 
+  /* ==================== 周辺装飾（マット）画像差し替え(全ステージ分) ==================== */
+  let uploadTargetMatStage = 0;
+
+  function renderMatImageList() {
+    matImageList.innerHTML = '';
+    STAGES.forEach((_, idx) => {
+      const key = matKey(idx);
+      const row = document.createElement('div');
+      row.className = 'stage-image-row';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      if (matImages[key]) {
+        thumb.style.backgroundImage = `url("${matImages[key]}")`;
+      } else {
+        thumb.style.backgroundImage = 'none';
+        thumb.style.backgroundColor = 'rgba(255,255,255,0.08)';
+      }
+
+      const label = document.createElement('div');
+      label.className = 'thumb-label';
+      label.innerHTML = `ステージ ${idx + 1}<span class="thumb-sub">${matImages[key] ? '画像設定済み' : '未設定（単色表示）'}</span>`;
+
+      const btn = document.createElement('button');
+      btn.className = 'change-btn';
+      btn.type = 'button';
+      btn.textContent = '変更';
+      btn.addEventListener('click', () => {
+        uploadTargetMatStage = idx;
+        matImageInput.click();
+      });
+
+      row.appendChild(thumb);
+      row.appendChild(label);
+      row.appendChild(btn);
+      matImageList.appendChild(row);
+    });
+  }
+
+  matImageInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const targetIdx = uploadTargetMatStage;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawImg = new Image();
+      rawImg.onload = () => {
+        const dataUrl = compressImage(rawImg, 900, 0.8);
+        const key = matKey(targetIdx);
+        matImages[key] = dataUrl;
+        saveGame();
+
+        const finalImg = new Image();
+        finalImg.onload = () => { loadedMatImages[key] = finalImg; };
+        finalImg.src = dataUrl;
+
+        renderMatImageList();
+      };
+      rawImg.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    matImageInput.value = '';
+  });
+
   function compressImage(img, maxDim, quality) {
     let w = img.naturalWidth, h = img.naturalHeight;
     const scale = Math.min(1, maxDim / Math.max(w, h));
@@ -712,6 +997,7 @@
     loadGame();
     resize();
     ensureStageImageLoaded(stageIndex);
+    ensureMatImageLoaded(stageIndex);
     resetStage(true);
     // safe-area等の反映が1フレーム遅れる端末があるため、次フレームで再計測して位置を確定させる
     requestAnimationFrame(() => {
