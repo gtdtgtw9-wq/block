@@ -290,12 +290,18 @@
   }
 
   /* ==================== 描画 ==================== */
-  function drawImageCover(img, x, y, w, h, alpha) {
-    if (!img || !img.naturalWidth) return;
+  function computeCoverRect(img, w, h) {
+    // object-fit: cover相当のsource矩形(sx, sy, sw, sh)を計算する
     const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
     const sw = w / scale, sh = h / scale;
     const sx = (img.naturalWidth - sw) / 2;
     const sy = (img.naturalHeight - sh) / 2;
+    return { sx, sy, sw, sh };
+  }
+
+  function drawImageCover(img, x, y, w, h, alpha) {
+    if (!img || !img.naturalWidth) return;
+    const { sx, sy, sw, sh } = computeCoverRect(img, w, h);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
@@ -386,50 +392,6 @@
   }
 
 
-  function clipToSegmentsVertical(x, width, segments) {
-    const path = new Path2D();
-    for (const s of segments) {
-      path.rect(x, s.start, width, s.end - s.start);
-    }
-    ctx.clip(path);
-  }
-
-  function clipToSegmentsHorizontal(y, height, segments) {
-    const path = new Path2D();
-    for (const s of segments) {
-      path.rect(s.start, y, s.end - s.start, height);
-    }
-    ctx.clip(path);
-  }
-
-  function drawVerticalBandMat(x, width, yStart, yEnd, gaps, matImg, idx) {
-    const segments = complementSegments(yStart, yEnd, gaps);
-    if (segments.length === 0) return;
-    ctx.save();
-    clipToSegmentsVertical(x, width, segments);
-    if (matImg) {
-      drawImageCover(matImg, x, yStart, width, yEnd - yStart, 1);
-    } else {
-      ctx.fillStyle = '#1b1e29';
-      ctx.fillRect(x, yStart, width, yEnd - yStart);
-    }
-    ctx.restore();
-  }
-
-  function drawHorizontalBandMat(y, height, xStart, xEnd, gaps, matImg, idx) {
-    const segments = complementSegments(xStart, xEnd, gaps);
-    if (segments.length === 0) return;
-    ctx.save();
-    clipToSegmentsHorizontal(y, height, segments);
-    if (matImg) {
-      drawImageCover(matImg, xStart, y, xEnd - xStart, height, 1);
-    } else {
-      ctx.fillStyle = '#1b1e29';
-      ctx.fillRect(xStart, y, xEnd - xStart, height);
-    }
-    ctx.restore();
-  }
-
   function strokeVerticalLine(x, yStart, yEnd, gaps) {
     ctx.beginPath();
     for (const s of complementSegments(yStart, yEnd, gaps)) {
@@ -452,14 +414,29 @@
     const rightX = blockAreaLeft + blockAreaWidth;
     const bottomY = blockAreaTop + blockAreaHeight;
     const matImg = loadedMatImages[matKey(stageIndex)];
-    ctx.save();
-    // 左右の帯はブロックエリアの高さ範囲のみ（穴の位置は塗らずに開ける）。マット画像があればそれを敷き、なければ単色
-    if (blockAreaLeft > 0) drawVerticalBandMat(0, blockAreaLeft, blockAreaTop, bottomY, leftGaps, matImg, stageIndex);
-    if (rightX < W) drawVerticalBandMat(rightX, W - rightX, blockAreaTop, bottomY, rightGaps, matImg, stageIndex);
-    // 上端の帯（画面上端からブロックエリア上端まで。穴の位置は塗らずに開ける）
-    if (blockAreaTop > 0) drawHorizontalBandMat(0, blockAreaTop, blockAreaLeft, rightX, topGaps, matImg, stageIndex);
 
-    // 反射境界線（内側の縁を強調。穴の位置は線を途切れさせる）
+    ctx.save();
+
+    // 帯（フレーム）の背景：マット画像は帯ごとに個別クロップせず、
+    // 「下敷き」として画像1枚をフレーム全体の外接矩形(0,0,W,bottomY)に対して1回だけcover計算し、
+    // 上・左・右の帯はその同じ絵を覗く窓として描画する。穴の位置も含めて全面を塗る（穴を視覚的に途切れさせない）
+    const bandPath = new Path2D();
+    if (blockAreaLeft > 0) bandPath.rect(0, blockAreaTop, blockAreaLeft, bottomY - blockAreaTop);
+    if (rightX < W) bandPath.rect(rightX, blockAreaTop, W - rightX, bottomY - blockAreaTop);
+    if (blockAreaTop > 0) bandPath.rect(blockAreaLeft, 0, rightX - blockAreaLeft, blockAreaTop);
+
+    ctx.save();
+    ctx.clip(bandPath);
+    if (matImg && matImg.naturalWidth) {
+      const { sx, sy, sw, sh } = computeCoverRect(matImg, W, bottomY);
+      ctx.drawImage(matImg, sx, sy, sw, sh, 0, 0, W, bottomY);
+    } else {
+      ctx.fillStyle = '#1b1e29';
+      ctx.fillRect(0, 0, W, bottomY);
+    }
+    ctx.restore();
+
+    // 反射境界線（内側の縁を強調。こちらは従来通り、穴の位置で線を途切れさせる＝壁の実体位置の視覚的な手がかりとして維持）
     ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
     ctx.lineWidth = 2;
     strokeVerticalLine(blockAreaLeft, blockAreaTop, bottomY, leftGaps);
