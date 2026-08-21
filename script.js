@@ -72,6 +72,8 @@
   let loadedImages = {};       // { stage1: HTMLImageElement }
   let matImages = {};          // { mat1: dataURL, ... } 周辺部（マット）用画像
   let loadedMatImages = {};    // { mat1: HTMLImageElement }
+  let matLayerDirty = true;    // trueならマット下敷きレイヤー(オフスクリーン)を再生成する
+  let matLayerCache = null;    // { key, canvas } 直近生成したマット下敷きレイヤー
 
   let blocks = [];
   let blockAreaTop = 0, blockAreaLeft = 0, blockAreaWidth = 0, blockAreaHeight = 0;
@@ -135,6 +137,7 @@
   function resetAllMatImages() {
     matImages = {};
     loadedMatImages = {};
+    matLayerDirty = true;
     saveGame();
   }
 
@@ -162,7 +165,7 @@
     const src = matImages[key];
     if (!src) return;
     const img = new Image();
-    img.onload = () => { loadedMatImages[key] = img; };
+    img.onload = () => { loadedMatImages[key] = img; matLayerDirty = true; };
     img.src = src;
   }
 
@@ -191,6 +194,7 @@
     paddle.y = H - 64;
     paddle.x = Math.min(Math.max(paddle.x, paddle.w / 2), W - paddle.w / 2) || W / 2;
 
+    matLayerDirty = true; // キャンバス/ブロックエリアの寸法が変わったのでマット下敷きレイヤーを再生成する
     layoutBlocks();
   }
 
@@ -241,6 +245,7 @@
     topGaps = generateGapsOnSegment(blockAreaLeft, rightX, rand(maxGaps), GAP_WIDTH);
     leftGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
     rightGaps = generateGapsOnSegment(blockAreaTop, blockAreaBottom, rand(maxGaps), GAP_WIDTH);
+    matLayerDirty = true; // 穴の配置が変わったのでマット下敷きレイヤーを再生成する
   }
 
   function resetStage(fullReset) {
@@ -411,6 +416,45 @@
     ctx.stroke();
   }
 
+  function getMatLayer(matImg, w, h) {
+    // 帯の背景（マット画像／単色）を1回だけ描いたオフスクリーンレイヤーを作り、
+    // 穴の区間だけdestination-outで不透明度を落としてから、本体キャンバスへは完成品を1回だけ転写する。
+    // 背景画像そのものへ複数回重ね描きすることがないため、境界の継ぎ目が原理的に発生しない。
+    // 画像・サイズ・穴の配置が変わらない限りキャッシュを再利用する
+    const key = (matImg ? matImg.src : 'none') + '|' + w + '|' + h;
+    if (!matLayerDirty && matLayerCache && matLayerCache.key === key) {
+      return matLayerCache.canvas;
+    }
+
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(w));
+    off.height = Math.max(1, Math.round(h));
+    const octx = off.getContext('2d');
+
+    if (matImg && matImg.naturalWidth) {
+      const { sx, sy, sw, sh } = computeCoverRect(matImg, w, h);
+      octx.drawImage(matImg, sx, sy, sw, sh, 0, 0, w, h);
+    } else {
+      octx.fillStyle = '#1b1e29';
+      octx.fillRect(0, 0, w, h);
+    }
+
+    // 穴の区間（開口部）だけ不透明度を落とし、下地の暗い背景を透かせることで
+    // 「そこだけ薄い＝通過できる」ことを視覚的に示す（案D）
+    const rightX = blockAreaLeft + blockAreaWidth;
+    const bottomY = blockAreaTop + blockAreaHeight;
+    octx.globalCompositeOperation = 'destination-out';
+    octx.fillStyle = `rgba(0, 0, 0, ${1 - GAP_FADE_ALPHA})`;
+    for (const g of leftGaps) octx.fillRect(0, g.start, blockAreaLeft, g.end - g.start);
+    for (const g of rightGaps) octx.fillRect(rightX, g.start, w - rightX, g.end - g.start);
+    for (const g of topGaps) octx.fillRect(g.start, 0, g.end - g.start, blockAreaTop);
+    octx.globalCompositeOperation = 'source-over';
+
+    matLayerCache = { key, canvas: off };
+    matLayerDirty = false;
+    return off;
+  }
+
   function drawFrame() {
     const rightX = blockAreaLeft + blockAreaWidth;
     const bottomY = blockAreaTop + blockAreaHeight;
@@ -423,53 +467,16 @@
     // 上・左・右の帯はその同じ絵を覗く窓として描画する。
     // 左右の帯は画面上端(y=0)から、上の帯は画面幅いっぱい(x=0〜W)から描画し、
     // 左上・右上のコーナー（上帯と左右帯の交差部分）も画像/単色で覆う（重なりはPath2D上で問題なし）
-    //
-    // 穴の区間（開口部）だけは不透明度を下げて描画し、下地の暗い背景を透かせることで
-    // 「そこだけ薄い＝通過できる」ことを視覚的に示す（案D）
-    const coverImg = (matImg && matImg.naturalWidth) ? matImg : null;
-    const cover = coverImg ? computeCoverRect(coverImg, W, bottomY) : null;
+    const bandPath = new Path2D();
+    if (blockAreaLeft > 0) bandPath.rect(0, 0, blockAreaLeft, bottomY);
+    if (rightX < W) bandPath.rect(rightX, 0, W - rightX, bottomY);
+    if (blockAreaTop > 0) bandPath.rect(0, 0, W, blockAreaTop);
 
-    // 隣接する区間の境界をわずかに重ねることで、Path2Dの矩形境界のアンチエイリアシングによる
-    // 継ぎ目（下地の暗い背景色が線状に透けて見える現象）を防ぐ
-    const SEG_OVERLAP = 0.75;
-    const pad = s => ({ start: s.start - SEG_OVERLAP, end: s.end + SEG_OVERLAP });
-
-    function fillBandRects(rects, alpha) {
-      if (rects.length === 0) return;
-      const path = new Path2D();
-      for (const r of rects) path.rect(r[0], r[1], r[2], r[3]);
-      ctx.save();
-      ctx.clip(path);
-      ctx.globalAlpha = alpha;
-      if (coverImg) {
-        ctx.drawImage(coverImg, cover.sx, cover.sy, cover.sw, cover.sh, 0, 0, W, bottomY);
-      } else {
-        ctx.fillStyle = '#1b1e29';
-        ctx.fillRect(0, 0, W, bottomY);
-      }
-      ctx.restore();
-    }
-
-    // 左帯：コーナー(y:0〜blockAreaTop)は常に不透明。ブロックエリア高さ範囲は穴を除いた区間のみ不透明、穴の区間は薄く
-    if (blockAreaLeft > 0) {
-      const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, leftGaps));
-      fillBandRects(opaqueSegs.map(pad).map(s => [0, s.start, blockAreaLeft, s.end - s.start]), 1);
-      fillBandRects(leftGaps.map(pad).map(s => [0, s.start, blockAreaLeft, s.end - s.start]), GAP_FADE_ALPHA);
-    }
-    // 右帯：左帯と同様
-    if (rightX < W) {
-      const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, rightGaps));
-      fillBandRects(opaqueSegs.map(pad).map(s => [rightX, s.start, W - rightX, s.end - s.start]), 1);
-      fillBandRects(rightGaps.map(pad).map(s => [rightX, s.start, W - rightX, s.end - s.start]), GAP_FADE_ALPHA);
-    }
-    // 上帯：左右コーナー(x:0〜blockAreaLeft、rightX〜W)は常に不透明。ブロックエリア幅範囲は穴を除いた区間のみ不透明、穴の区間は薄く
-    if (blockAreaTop > 0) {
-      const opaqueSegs = [{ start: 0, end: blockAreaLeft }]
-        .concat(complementSegments(blockAreaLeft, rightX, topGaps))
-        .concat([{ start: rightX, end: W }]);
-      fillBandRects(opaqueSegs.map(pad).map(s => [s.start, 0, s.end - s.start, blockAreaTop]), 1);
-      fillBandRects(topGaps.map(pad).map(s => [s.start, 0, s.end - s.start, blockAreaTop]), GAP_FADE_ALPHA);
-    }
+    const matLayer = getMatLayer((matImg && matImg.naturalWidth) ? matImg : null, W, bottomY);
+    ctx.save();
+    ctx.clip(bandPath);
+    ctx.drawImage(matLayer, 0, 0);
+    ctx.restore();
 
     // 反射境界線（内側の縁を強調。こちらは従来通り、穴の位置で線を途切れさせる＝壁の実体位置の視覚的な手がかりとして維持）
     ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
@@ -977,7 +984,7 @@
         saveGame();
 
         const finalImg = new Image();
-        finalImg.onload = () => { loadedMatImages[key] = finalImg; };
+        finalImg.onload = () => { loadedMatImages[key] = finalImg; matLayerDirty = true; };
         finalImg.src = dataUrl;
 
         renderMatImageList();
