@@ -354,6 +354,7 @@
 
   const WALL_THICKNESS = 6; // 壁の当たり判定用の厚み（見た目のフレームとは別。境界線をまたぐ判定を安定させるため）
   const WALL_BOUNCE_MARGIN = 0.05; // 跳ね返り位置に持たせる微小な余白（浮動小数点誤差によるブロックとの誤衝突防止）
+  const GAP_FADE_ALPHA = 0.35; // 反射壁の穴（開口部）の区間で、帯の背景（マット画像/単色）を描画する際の不透明度
 
   function collideVerticalWall(ball, wallX, segStart, segEnd) {
     // 左右の壁用：wallXを中心とした薄い壁に、ブロックと同様の単純な矩形衝突判定を行う
@@ -419,29 +420,51 @@
 
     // 帯（フレーム）の背景：マット画像は帯ごとに個別クロップせず、
     // 「下敷き」として画像1枚をフレーム全体の外接矩形(0,0,W,bottomY)に対して1回だけcover計算し、
-    // 上・左・右の帯はその同じ絵を覗く窓として描画する。穴の位置も含めて全面を塗る（穴を視覚的に途切れさせない）
+    // 上・左・右の帯はその同じ絵を覗く窓として描画する。
     // 左右の帯は画面上端(y=0)から、上の帯は画面幅いっぱい(x=0〜W)から描画し、
     // 左上・右上のコーナー（上帯と左右帯の交差部分）も画像/単色で覆う（重なりはPath2D上で問題なし）
-    const bandPath = new Path2D();
-    if (blockAreaLeft > 0) bandPath.rect(0, 0, blockAreaLeft, bottomY);
-    if (rightX < W) bandPath.rect(rightX, 0, W - rightX, bottomY);
-    if (blockAreaTop > 0) bandPath.rect(0, 0, W, blockAreaTop);
+    //
+    // 穴の区間（開口部）だけは不透明度を下げて描画し、下地の暗い背景を透かせることで
+    // 「そこだけ薄い＝通過できる」ことを視覚的に示す（案D）
+    const coverImg = (matImg && matImg.naturalWidth) ? matImg : null;
+    const cover = coverImg ? computeCoverRect(coverImg, W, bottomY) : null;
 
-    ctx.save();
-    ctx.clip(bandPath);
-    if (matImg && matImg.naturalWidth) {
-      const { sx, sy, sw, sh } = computeCoverRect(matImg, W, bottomY);
-      ctx.drawImage(matImg, sx, sy, sw, sh, 0, 0, W, bottomY);
-    } else {
-      ctx.fillStyle = '#1b1e29';
-      ctx.fillRect(0, 0, W, bottomY);
+    function fillBandRects(rects, alpha) {
+      if (rects.length === 0) return;
+      const path = new Path2D();
+      for (const r of rects) path.rect(r[0], r[1], r[2], r[3]);
+      ctx.save();
+      ctx.clip(path);
+      ctx.globalAlpha = alpha;
+      if (coverImg) {
+        ctx.drawImage(coverImg, cover.sx, cover.sy, cover.sw, cover.sh, 0, 0, W, bottomY);
+      } else {
+        ctx.fillStyle = '#1b1e29';
+        ctx.fillRect(0, 0, W, bottomY);
+      }
+      ctx.restore();
     }
-    // 穴の区間だけ暗くして、開口部（ボールが通過できる位置）であることを視覚的に強調する
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    for (const g of leftGaps) ctx.fillRect(0, g.start, blockAreaLeft, g.end - g.start);
-    for (const g of rightGaps) ctx.fillRect(rightX, g.start, W - rightX, g.end - g.start);
-    for (const g of topGaps) ctx.fillRect(g.start, 0, g.end - g.start, blockAreaTop);
-    ctx.restore();
+
+    // 左帯：コーナー(y:0〜blockAreaTop)は常に不透明。ブロックエリア高さ範囲は穴を除いた区間のみ不透明、穴の区間は薄く
+    if (blockAreaLeft > 0) {
+      const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, leftGaps));
+      fillBandRects(opaqueSegs.map(s => [0, s.start, blockAreaLeft, s.end - s.start]), 1);
+      fillBandRects(leftGaps.map(g => [0, g.start, blockAreaLeft, g.end - g.start]), GAP_FADE_ALPHA);
+    }
+    // 右帯：左帯と同様
+    if (rightX < W) {
+      const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, rightGaps));
+      fillBandRects(opaqueSegs.map(s => [rightX, s.start, W - rightX, s.end - s.start]), 1);
+      fillBandRects(rightGaps.map(g => [rightX, g.start, W - rightX, g.end - g.start]), GAP_FADE_ALPHA);
+    }
+    // 上帯：左右コーナー(x:0〜blockAreaLeft、rightX〜W)は常に不透明。ブロックエリア幅範囲は穴を除いた区間のみ不透明、穴の区間は薄く
+    if (blockAreaTop > 0) {
+      const opaqueSegs = [{ start: 0, end: blockAreaLeft }]
+        .concat(complementSegments(blockAreaLeft, rightX, topGaps))
+        .concat([{ start: rightX, end: W }]);
+      fillBandRects(opaqueSegs.map(s => [s.start, 0, s.end - s.start, blockAreaTop]), 1);
+      fillBandRects(topGaps.map(g => [g.start, 0, g.end - g.start, blockAreaTop]), GAP_FADE_ALPHA);
+    }
 
     // 反射境界線（内側の縁を強調。こちらは従来通り、穴の位置で線を途切れさせる＝壁の実体位置の視覚的な手がかりとして維持）
     ctx.strokeStyle = 'rgba(217, 119, 87, 0.65)';
