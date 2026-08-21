@@ -429,6 +429,11 @@
     const coverImg = (matImg && matImg.naturalWidth) ? matImg : null;
     const cover = coverImg ? computeCoverRect(coverImg, W, bottomY) : null;
 
+    // 隣接する区間の境界をわずかに重ねることで、Path2Dの矩形境界のアンチエイリアシングによる
+    // 継ぎ目（下地の暗い背景色が線状に透けて見える現象）を防ぐ
+    const SEG_OVERLAP = 0.75;
+    const pad = s => ({ start: s.start - SEG_OVERLAP, end: s.end + SEG_OVERLAP });
+
     function fillBandRects(rects, alpha) {
       if (rects.length === 0) return;
       const path = new Path2D();
@@ -448,22 +453,22 @@
     // 左帯：コーナー(y:0〜blockAreaTop)は常に不透明。ブロックエリア高さ範囲は穴を除いた区間のみ不透明、穴の区間は薄く
     if (blockAreaLeft > 0) {
       const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, leftGaps));
-      fillBandRects(opaqueSegs.map(s => [0, s.start, blockAreaLeft, s.end - s.start]), 1);
-      fillBandRects(leftGaps.map(g => [0, g.start, blockAreaLeft, g.end - g.start]), GAP_FADE_ALPHA);
+      fillBandRects(opaqueSegs.map(pad).map(s => [0, s.start, blockAreaLeft, s.end - s.start]), 1);
+      fillBandRects(leftGaps.map(pad).map(s => [0, s.start, blockAreaLeft, s.end - s.start]), GAP_FADE_ALPHA);
     }
     // 右帯：左帯と同様
     if (rightX < W) {
       const opaqueSegs = [{ start: 0, end: blockAreaTop }].concat(complementSegments(blockAreaTop, bottomY, rightGaps));
-      fillBandRects(opaqueSegs.map(s => [rightX, s.start, W - rightX, s.end - s.start]), 1);
-      fillBandRects(rightGaps.map(g => [rightX, g.start, W - rightX, g.end - g.start]), GAP_FADE_ALPHA);
+      fillBandRects(opaqueSegs.map(pad).map(s => [rightX, s.start, W - rightX, s.end - s.start]), 1);
+      fillBandRects(rightGaps.map(pad).map(s => [rightX, s.start, W - rightX, s.end - s.start]), GAP_FADE_ALPHA);
     }
     // 上帯：左右コーナー(x:0〜blockAreaLeft、rightX〜W)は常に不透明。ブロックエリア幅範囲は穴を除いた区間のみ不透明、穴の区間は薄く
     if (blockAreaTop > 0) {
       const opaqueSegs = [{ start: 0, end: blockAreaLeft }]
         .concat(complementSegments(blockAreaLeft, rightX, topGaps))
         .concat([{ start: rightX, end: W }]);
-      fillBandRects(opaqueSegs.map(s => [s.start, 0, s.end - s.start, blockAreaTop]), 1);
-      fillBandRects(topGaps.map(g => [g.start, 0, g.end - g.start, blockAreaTop]), GAP_FADE_ALPHA);
+      fillBandRects(opaqueSegs.map(pad).map(s => [s.start, 0, s.end - s.start, blockAreaTop]), 1);
+      fillBandRects(topGaps.map(pad).map(s => [s.start, 0, s.end - s.start, blockAreaTop]), GAP_FADE_ALPHA);
     }
 
     // 反射境界線（内側の縁を強調。こちらは従来通り、穴の位置で線を途切れさせる＝壁の実体位置の視覚的な手がかりとして維持）
