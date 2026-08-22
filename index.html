@@ -69,6 +69,15 @@
     </div>
   </div>
 
-<script src="script.js"></script>
+<!--
+  ファイル分割（Backlog対応）：以下の順序に依存関係があるため、この順番を変更しないこと。
+  config.js → state.js → game.js → ui.js → main.js
+  詳細は 01_CURRENT.md / 04_CHANGELOG.md 参照
+-->
+<script src="config.js"></script>
+<script src="state.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+<script src="main.js"></script>
 </body>
 </html>
