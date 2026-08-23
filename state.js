@@ -22,6 +22,7 @@
   let blocks = [];
   let blockAreaTop = 0, blockAreaLeft = 0, blockAreaWidth = 0, blockAreaHeight = 0;
   let totalBlocks = 0, brokenBlocks = 0;
+  let currentPattern = null; // 現在のステージで選ばれているブロック配置パターン（(r,c,rows,cols)=>bool）。nullなら全面配置
 
   let paddle = { x: 0, y: 0, w: PADDLE_BASE_W, h: 14 };
   let balls = []; // 複数ボール対応 { x, y, r, vx, vy, slow }

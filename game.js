@@ -42,9 +42,11 @@
     const bw = (blockAreaWidth - pad * (cols + 1)) / cols;
     const bh = (blockAreaHeight - pad * (rows + 1)) / rows;
 
+    const mask = currentPattern; // ステージ開始時に選ばれたブロック配置パターン。nullなら全面配置
     const newBlocks = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
+        if (mask && !mask(r, c, rows, cols)) continue; // このマスにはブロックを置かない（パターンによる欠け）
         newBlocks.push({
           x: blockAreaLeft + pad + c * (bw + pad),
           y: blockAreaTop + pad + r * (bh + pad),
@@ -57,6 +59,13 @@
     blocks = newBlocks;
     totalBlocks = blocks.length;
     brokenBlocks = 0;
+  }
+
+  function selectStagePattern(stageIdx) {
+    // そのステージにパターン候補が定義されていればランダムに1つ選ぶ。未定義なら従来通りnull（全面配置）
+    const candidates = STAGE_PATTERNS[stageIdx];
+    if (!candidates || candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   /* ==================== ステージ制御 ==================== */
@@ -85,6 +94,7 @@
   }
 
   function resetStage(fullReset) {
+    currentPattern = selectStagePattern(stageIndex); // ステージ開始・リトライ・次ステージ移行のたびにパターンを再選択
     layoutBlocks();
     if (fullReset) { life = MAX_LIFE; score = 0; }
     items = [];

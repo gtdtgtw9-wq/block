@@ -51,6 +51,125 @@
     { rows: 72, cols: 13 },
   ];
 
+  // ブロック配置パターン（Backlog「パターンのランダム化」対応）。
+  // 各関数は (r, c, rows, cols) => true/false で、そのマス(行r・列c)にブロックを置くかどうかを返す。
+  // rows/colsの数値自体は変えず、配置の欠けさせ方だけで見た目に特色を出す。
+  //
+  // 形状系パターン（diamond/hourglass/triangle）は、ブロックエリアの物理的な縦横比（IMAGE_ASPECT）を
+  // 考慮して座標補正している。単純に行・列のインデックスだけで正規化すると、
+  // ブロックエリアが縦長（列数が少なく行数が多い）なせいで形状が縦に潰れて見えてしまうため。
+  const BLOCK_PATTERNS = {
+    // 市松模様：1マスおきに配置
+    checkerboard: (r, c) => (r + c) % 2 === 0,
+
+    // ジグザグ：行ごとに配置する列の範囲を三角波状に左右へずらし、稲妻状のシルエットを作る
+    zigzag: (r, c, rows, cols) => {
+      const period = 16;
+      const tri = period - Math.abs((r % period) - Math.floor(period / 2)) * 2;
+      const offset = tri % cols;
+      const width = Math.max(2, cols - 4);
+      const start = offset % Math.max(1, cols - width + 1);
+      return c >= start && c < start + width;
+    },
+
+    // 斜め階段：対角の帯（階段状）が繰り返し重なる形
+    diagonalStaircase: (r, c) => {
+      const stepRows = 2;   // 何行ごとに1段とするか
+      const bandWidth = 2;  // 帯の太さ（列換算）
+      const period = 6;     // 何列ぶんで1周期にするか
+      const idx = Math.floor(r / stepRows) + c;
+      return ((idx % period) + period) % period < bandWidth;
+    },
+
+    // 点在：縦・横ともに間引いた疎らな点状配置
+    dotsSparse: (r, c) => r % 3 === 0 && c % 2 === 0,
+
+    // 細い斜め線：1本の細い斜め線が繰り返し流れる
+    thinDiagonal: (r, c) => {
+      const idx = Math.floor(r / 2) + c;
+      return (idx % 7) === 0;
+    },
+
+    // 外枠のみ：中央を空けた額縁状
+    borderFrame: (r, c, rows, cols) => (r < 2 || r >= rows - 2 || c < 1 || c >= cols - 1),
+
+    // 十字架：小さな十字架（縦棒が長め）がタイル状に繰り返し浮かぶ形
+    manyCrosses: (r, c) => {
+      const tileRows = 10, tileCols = 5; // タイルサイズ（十字架どうしの間隔）
+      const centerRow = 4, centerCol = 2; // タイル内での十字架の中心位置
+      const vArm = 3, hArm = 1; // 縦棒・横棒の長さ（縦棒を長めにして十字架らしくする）
+      const lr = r % tileRows;
+      const lc = c % tileCols;
+      const vertical = (lc === centerCol) && Math.abs(lr - centerRow) <= vArm;
+      const horizontal = (lr === centerRow) && Math.abs(lc - centerCol) <= hArm;
+      return vertical || horizontal;
+    },
+
+    // シェブロン：V字模様が波状に縦へ積み重なる
+    chevronStack: (r, c, rows, cols) => {
+      const period = 12;    // 何行で1周期にするか
+      const thickness = 2;  // 線の太さ
+      const freq = 1.0;     // V字の開き具合
+      const lr = r % period;
+      const fx = Math.abs(c - (cols - 1) / 2);
+      const centerRow = Math.round(fx * freq) % period;
+      return Math.abs(lr - centerRow) < thickness ||
+             Math.abs(lr - centerRow - period) < thickness ||
+             Math.abs(lr - centerRow + period) < thickness;
+    },
+
+    // 砂時計：上下端が太く中央でくびれる形（IMAGE_ASPECTで縦横比を補正）
+    hourglass: (r, c, rows, cols) => {
+      const fx = ((c + 0.5) / cols - 0.5) * IMAGE_ASPECT;
+      const fy = (r + 0.5) / rows - 0.5;
+      const halfWidth = Math.abs(fy) * 0.9;
+      return Math.abs(fx) <= halfWidth;
+    },
+
+    // 三角形：上端が尖り下端が広がる山形（IMAGE_ASPECTで縦横比を補正）
+    triangle: (r, c, rows, cols) => {
+      const fx = ((c + 0.5) / cols - 0.5) * IMAGE_ASPECT;
+      const fy = (r + 0.5) / rows - 0.5;
+      const ny = fy + 0.5; // 0(上)〜1(下)
+      const halfWidth = ny * 0.45;
+      return Math.abs(fx) <= halfWidth;
+    },
+
+    // 縦縞：細い縦のストライプ
+    verticalStripes: (r, c) => c % 3 === 0,
+
+    // 横縞：太めの横のストライプ（隙間は細め）
+    horizontalStripes: (r) => (r % 4) < 3,
+
+    // レンガ調：横帯を1行ごとに互い違いにずらし、隙間をレンガの目地状にする
+    brickOffset: (r, c) => {
+      const offset = Math.floor(r / 2) % 2;
+      return !((c + offset) % 4 === 0);
+    },
+
+    // 中抜き改めメッシュ状：びっしり埋めた中に、規則的な小さな穴を無数に開ける
+    meshHoles: (r, c) => {
+      const hole = (r % 4 === 1) && (c % 3 === 1);
+      return !hole;
+    },
+
+    // 大きめ市松：2x2マス単位で市松模様にし、粒の大きいテクスチャにする
+    bigChecker: (r, c) => (Math.floor(r / 2) + Math.floor(c / 2)) % 2 === 0,
+  };
+
+  // ステージごとに使用するパターン候補。ステージ開始のたびにこの中からランダムに1つ選ぶ。
+  // 未定義のステージは従来通り全面配置（フォールバック）。
+  // 15パターンを充填率（ブロック密度）の低い順に3つずつ、ステージ1〜5へ割り振っている。
+  // まずはステージ1〜5のみ実装し、ステージ6〜10は今後順次追加していく
+  // （diamond/crossPlus/hollowCenterは図柄がシンプルすぎるとの指摘によりchevronStack/manyCrosses/meshHolesへ差し替え）
+  const STAGE_PATTERNS = {
+    0: [BLOCK_PATTERNS.thinDiagonal, BLOCK_PATTERNS.dotsSparse, BLOCK_PATTERNS.chevronStack],       // ステージ1（充填率 約14〜28%）
+    1: [BLOCK_PATTERNS.borderFrame, BLOCK_PATTERNS.diagonalStaircase, BLOCK_PATTERNS.verticalStripes], // ステージ2（約32〜38%）
+    2: [BLOCK_PATTERNS.checkerboard, BLOCK_PATTERNS.zigzag, BLOCK_PATTERNS.bigChecker],             // ステージ3（約50%）
+    3: [BLOCK_PATTERNS.manyCrosses, BLOCK_PATTERNS.hourglass, BLOCK_PATTERNS.triangle],             // ステージ4（約20〜67%）
+    4: [BLOCK_PATTERNS.brickOffset, BLOCK_PATTERNS.horizontalStripes, BLOCK_PATTERNS.meshHoles],    // ステージ5（約75〜93%）
+  };
+
   // カスタム画像が未設定のステージ用プレースホルダー配色
   const PLACEHOLDER_COLORS = [
     ['#3a3f5c', '#6a4c93'],
@@ -64,4 +183,5 @@
     ['#4a2f5c', '#8a5ca8'],
     ['#5c2f3a', '#a45c72'],
   ];
+
 
