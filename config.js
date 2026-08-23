@@ -188,7 +188,13 @@
   STAGE_PATTERNS[9] = STAGE_PATTERNS[4]; // ステージ10 ＝ ステージ5と同じ
 
 
-  // カスタム画像が未設定のステージ用プレースホルダー配色
+  // ボールの見た目（トランプスーツ4種＋従来の円形、v0.28〜）：情報パネルで選択、localStorageに保存
+  // 色に関しては別タスクで対応予定のため、現時点ではスーツ・円形いずれも単一色（既存のボール色）で描画する
+  const BALL_SHAPES = ['circle', 'spade', 'heart', 'diamond', 'club'];
+  const DEFAULT_BALL_SHAPE = 'spade';
+  const SUIT_GLYPHS = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' }; // 'circle'は専用のarc描画のためここには含めない
+
+
   const PLACEHOLDER_COLORS = [
     ['#3a3f5c', '#6a4c93'],
     ['#2f5d62', '#4c9a8e'],

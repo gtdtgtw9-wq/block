@@ -343,13 +343,23 @@
     ctx.fill();
     ctx.restore();
 
-    // ボール
+    // ボール（トランプスーツの絵文字、または従来の円形。色に関しては別タスクで対応予定のため現状は単一色）
     ctx.save();
     ctx.fillStyle = '#f4f2ec';
-    for (const b of balls) {
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-      ctx.fill();
+    if (ballShape === 'circle') {
+      for (const b of balls) {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ctx.font = `${BALL_RADIUS * 2.4}px -apple-system, "Hiragino Sans", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const glyph = SUIT_GLYPHS[ballShape] || SUIT_GLYPHS[DEFAULT_BALL_SHAPE];
+      for (const b of balls) {
+        ctx.fillText(glyph, b.x, b.y);
+      }
     }
     ctx.restore();
   }
