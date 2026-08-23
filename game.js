@@ -43,16 +43,19 @@
     const bh = (blockAreaHeight - pad * (rows + 1)) / rows;
 
     const mask = currentPattern; // ステージ開始時に選ばれたブロック配置パターン。nullなら全面配置
+    const reinforceChance = REINFORCED_CHANCE_BY_STAGE[stageIndex] || 0; // 強化ブロックの出現率（6〜10面のみ0より大きい）
     const newBlocks = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (mask && !mask(r, c, rows, cols)) continue; // このマスにはブロックを置かない（パターンによる欠け）
+        const isReinforced = reinforceChance > 0 && Math.random() < reinforceChance;
         newBlocks.push({
           x: blockAreaLeft + pad + c * (bw + pad),
           y: blockAreaTop + pad + r * (bh + pad),
           w: bw,
           h: bh,
           alive: true,
+          hp: isReinforced ? 2 : 1, // 強化ブロックは耐久2（2回当てないと壊れない）
         });
       }
     }
@@ -316,11 +319,11 @@
       drawPlaceholder(blockAreaLeft, blockAreaTop, blockAreaWidth, blockAreaHeight, 1, stageIndex);
     }
 
-    // ブロック
+    // ブロック（強化ブロックは耐久2で黄色。残り1回になったら通常ブロックの色に戻る）
     for (const b of blocks) {
       if (!b.alive) continue;
       ctx.save();
-      ctx.fillStyle = 'rgba(244, 242, 236, 1)';
+      ctx.fillStyle = (b.hp >= 2) ? REINFORCED_BLOCK_COLOR : NORMAL_BLOCK_COLOR;
       ctx.strokeStyle = 'rgba(12, 14, 20, 0.5)';
       ctx.lineWidth = 1;
       ctx.fillRect(b.x, b.y, b.w, b.h);
@@ -444,12 +447,16 @@
           if (!b.alive) continue;
           if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
               ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+            b.hp = (b.hp || 1) - 1; // 強化ブロックは耐久2からスタート。1回当たっただけでは壊れない
+            if (!piercing) {
+              ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進（強化ブロックが残っていても同様）
+            }
+
+            if (b.hp > 0) break; // まだ壊れていない（強化ブロックの1回目ヒット）：スコア・アイテム・破壊率は更新しない
+
             b.alive = false;
             brokenBlocks++;
             score += SCORE_PER_BLOCK;
-            if (!piercing) {
-              ball.vy *= -1; // 貫通中は跳ね返さずそのまま直進
-            }
 
             // アイテム抽選（種類ごとの確率で1つだけ判定）
             const dropType = rollItemType();
