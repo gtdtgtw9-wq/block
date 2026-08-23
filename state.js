@@ -18,6 +18,7 @@
   let loadedImages = {};       // { stage1: HTMLImageElement }
   let matImages = {};          // { mat1: dataURL, ... } 周辺部（マット）用画像
   let loadedMatImages = {};    // { mat1: HTMLImageElement }
+  let ballShape = DEFAULT_BALL_SHAPE; // ボールの見た目（トランプスーツ4種から選択。localStorageに保存）
 
   let blocks = [];
   let blockAreaTop = 0, blockAreaLeft = 0, blockAreaWidth = 0, blockAreaHeight = 0;
@@ -54,6 +55,9 @@
       if (data.matImages && typeof data.matImages === 'object') {
         matImages = data.matImages;
       }
+      if (typeof data.ballShape === 'string' && BALL_SHAPES.includes(data.ballShape)) {
+        ballShape = data.ballShape;
+      }
     } catch (e) {
       console.warn('セーブデータの読み込みに失敗しました', e);
     }
@@ -61,7 +65,7 @@
 
   function saveGame() {
     try {
-      const data = { currentStage: stageIndex + 1, images, matImages };
+      const data = { currentStage: stageIndex + 1, images, matImages, ballShape };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       return true;
     } catch (e) {
@@ -114,4 +118,3 @@
     img.onload = () => { loadedMatImages[key] = img; };
     img.src = src;
   }
-

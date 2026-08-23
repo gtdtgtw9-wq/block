@@ -232,6 +232,31 @@ html, body {
   margin-bottom: 0;
 }
 
+/* ボールの見た目（トランプスーツ）選択 */
+.ball-shape-list {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ball-shape-btn {
+  flex: 1;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  color: #f4f2ec;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ball-shape-btn.selected {
+  border-color: #d97757;
+  background: rgba(217,119,87,0.18);
+  color: #d97757;
+}
+
 /* リセットボタンのグループ化：ステージ進行リセット＋▼で他のリセットを展開 */
 .reset-group {
   margin-bottom: 12px;

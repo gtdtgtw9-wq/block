@@ -23,6 +23,7 @@
   const resetMatImagesBtn = document.getElementById('resetMatImagesBtn');
   const matImageInput = document.getElementById('matImageInput');
   const matImageList = document.getElementById('matImageList');
+  const ballShapeButtons = document.querySelectorAll('.ball-shape-btn');
 
   function updatePanel() {
     panelStage.textContent = String(stageIndex + 1);
@@ -35,10 +36,26 @@
     resetToggleBtn.setAttribute('aria-expanded', 'false');
   }
 
+  /* ==================== ボールの見た目（トランプスーツ）選択 ==================== */
+  function updateBallShapeButtons() {
+    ballShapeButtons.forEach((btn) => {
+      btn.classList.toggle('selected', btn.dataset.shape === ballShape);
+    });
+  }
+
+  ballShapeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      ballShape = btn.dataset.shape;
+      saveGame();
+      updateBallShapeButtons();
+    });
+  });
+
   function openPanel() {
     updatePanel();
     renderStageImageList();
     renderMatImageList();
+    updateBallShapeButtons();
     collapseResetExtra(); // パネルを開くたびに展開状態はリセットしておく
     panel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');
