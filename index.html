@@ -42,9 +42,17 @@
 
       <div class="panel-divider"></div>
 
-      <button id="resetStageBtn" class="panel-button panel-button--danger">ステージ進行をリセット</button>
-      <button id="resetImagesBtn" class="panel-button panel-button--danger">画像をすべてリセット</button>
-      <button id="resetMatImagesBtn" class="panel-button panel-button--danger">周辺装飾画像をすべてリセット</button>
+      <!-- リセット系ボタン：1箇所にまとめ、▼でその他のリセットを展開表示 -->
+      <div class="reset-group">
+        <div class="reset-group__row">
+          <button id="resetStageBtn" class="panel-button panel-button--danger reset-group__main">ステージ進行をリセット</button>
+          <button id="resetToggleBtn" class="reset-group__toggle" type="button" aria-label="その他のリセットを表示" aria-expanded="false">▼</button>
+        </div>
+        <div id="resetExtra" class="reset-group__extra hidden">
+          <button id="resetImagesBtn" class="panel-button panel-button--danger">画像をすべてリセット</button>
+          <button id="resetMatImagesBtn" class="panel-button panel-button--danger">周辺装飾画像をすべてリセット</button>
+        </div>
+      </div>
 
       <button id="panelCloseBtn" class="panel-button panel-button--ghost">閉じる</button>
     </div>

@@ -15,6 +15,8 @@
   const panelLife = document.getElementById('panelLife');
   const panelCloseBtn = document.getElementById('panelCloseBtn');
   const resetStageBtn = document.getElementById('resetStageBtn');
+  const resetToggleBtn = document.getElementById('resetToggleBtn');
+  const resetExtra = document.getElementById('resetExtra');
   const resetImagesBtn = document.getElementById('resetImagesBtn');
   const imageInput = document.getElementById('imageInput');
   const stageImageList = document.getElementById('stageImageList');
@@ -28,10 +30,16 @@
     panelLife.textContent = '●'.repeat(Math.max(0, life)) + '○'.repeat(Math.max(0, MAX_LIFE - life));
   }
 
+  function collapseResetExtra() {
+    resetExtra.classList.add('hidden');
+    resetToggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
   function openPanel() {
     updatePanel();
     renderStageImageList();
     renderMatImageList();
+    collapseResetExtra(); // パネルを開くたびに展開状態はリセットしておく
     panel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');
     running = false;
@@ -44,6 +52,17 @@
   menuBtn.addEventListener('click', openPanel);
   panelCloseBtn.addEventListener('click', closePanel);
   panelOverlay.addEventListener('click', closePanel);
+
+  /* ==================== リセットボタングループ（▼で画像系リセットを展開） ==================== */
+  resetToggleBtn.addEventListener('click', () => {
+    const expanded = resetToggleBtn.getAttribute('aria-expanded') === 'true';
+    if (expanded) {
+      collapseResetExtra();
+    } else {
+      resetExtra.classList.remove('hidden');
+      resetToggleBtn.setAttribute('aria-expanded', 'true');
+    }
+  });
 
   resetStageBtn.addEventListener('click', () => {
     const ok = window.confirm('ステージ進行を1面目にリセットします（設定した画像はそのまま残ります）。よろしいですか？');
@@ -59,6 +78,7 @@
     resetAllImages();
     ensureStageImageLoaded(stageIndex);
     renderStageImageList();
+    collapseResetExtra();
   });
 
   resetMatImagesBtn.addEventListener('click', () => {
@@ -67,6 +87,7 @@
     resetAllMatImages();
     ensureMatImageLoaded(stageIndex);
     renderMatImageList();
+    collapseResetExtra();
   });
 
   /* ==================== 画像差し替え(全ステージ分) ==================== */
@@ -217,4 +238,3 @@
     octx.drawImage(img, 0, 0, w, h);
     return off.toDataURL('image/jpeg', quality);
   }
-
