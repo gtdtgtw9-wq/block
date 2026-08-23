@@ -305,16 +305,15 @@
 
     drawFrame();
 
-    const ratio = totalBlocks ? brokenBlocks / totalBlocks : 0;
+    // ブロックエリアの画像は、破壊率に関わらずステージ開始時から常に完全な不透明度で表示する（v0.25〜）。
+    // ブロック自体は不透明で上に重なっているため、実際に画像が見えるのはブロックが壊れた部分のみ（見た目上の挙動は維持）
     const key = stageKey(stageIndex);
     const img = loadedImages[key];
 
-    if (ratio > 0) {
-      if (img) {
-        drawImageCover(img, blockAreaLeft, blockAreaTop, blockAreaWidth, blockAreaHeight, ratio);
-      } else {
-        drawPlaceholder(blockAreaLeft, blockAreaTop, blockAreaWidth, blockAreaHeight, ratio, stageIndex);
-      }
+    if (img) {
+      drawImageCover(img, blockAreaLeft, blockAreaTop, blockAreaWidth, blockAreaHeight, 1);
+    } else {
+      drawPlaceholder(blockAreaLeft, blockAreaTop, blockAreaWidth, blockAreaHeight, 1, stageIndex);
     }
 
     // ブロック
