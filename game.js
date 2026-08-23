@@ -343,9 +343,9 @@
     ctx.fill();
     ctx.restore();
 
-    // ボール（トランプスーツの絵文字、または従来の円形。色に関しては別タスクで対応予定のため現状は単一色）
+    // ボール（トランプスーツの絵文字、または従来の円形。色はballColor（カラーピッカーで選択）を使用）
     ctx.save();
-    ctx.fillStyle = '#f4f2ec';
+    ctx.fillStyle = ballColor;
     if (ballShape === 'circle') {
       for (const b of balls) {
         ctx.beginPath();

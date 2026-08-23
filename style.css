@@ -257,6 +257,29 @@ html, body {
   color: #d97757;
 }
 
+/* ボールの色（カラーピッカー） */
+.ball-color-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.ball-color-row input[type="color"] {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ball-color-label {
+  color: #a9a7a0;
+  font-size: 13px;
+}
+
 /* リセットボタンのグループ化：ステージ進行リセット＋▼で他のリセットを展開 */
 .reset-group {
   margin-bottom: 12px;

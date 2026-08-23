@@ -24,6 +24,7 @@
   const matImageInput = document.getElementById('matImageInput');
   const matImageList = document.getElementById('matImageList');
   const ballShapeButtons = document.querySelectorAll('.ball-shape-btn');
+  const ballColorInput = document.getElementById('ballColorInput');
 
   function updatePanel() {
     panelStage.textContent = String(stageIndex + 1);
@@ -51,11 +52,18 @@
     });
   });
 
+  /* ==================== ボールの色（カラーピッカー） ==================== */
+  ballColorInput.addEventListener('input', () => {
+    ballColor = ballColorInput.value;
+    saveGame();
+  });
+
   function openPanel() {
     updatePanel();
     renderStageImageList();
     renderMatImageList();
     updateBallShapeButtons();
+    ballColorInput.value = ballColor; // パネルを開くたびに現在の選択色を反映
     collapseResetExtra(); // パネルを開くたびに展開状態はリセットしておく
     panel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');

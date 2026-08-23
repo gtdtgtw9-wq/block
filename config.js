@@ -195,6 +195,10 @@
   const SUIT_GLYPHS = { spade: '♠', heart: '♥', diamond: '♦', club: '♣' }; // 'circle'は専用のarc描画のためここには含めない
 
 
+  // ボールの色（カラーピッカーで自由指定、v0.29〜）：情報パネルで選択、localStorageに保存
+  const DEFAULT_BALL_COLOR = '#f4f2ec'; // 従来からのボール色（変更しない場合のデフォルト）
+
+  // カスタム画像が未設定のステージ用プレースホルダー配色
   const PLACEHOLDER_COLORS = [
     ['#3a3f5c', '#6a4c93'],
     ['#2f5d62', '#4c9a8e'],
