@@ -160,7 +160,10 @@
   // ステージごとに使用するパターン候補。ステージ開始のたびにこの中からランダムに1つ選ぶ。
   // 未定義のステージは従来通り全面配置（フォールバック）。
   // 15パターンを充填率（ブロック密度）の低い順に3つずつ、ステージ1〜5へ割り振っている。
-  // まずはステージ1〜5のみ実装し、ステージ6〜10は今後順次追加していく
+  // ステージ6〜10は、それぞれステージ1〜5と同じパターン配列をそのまま再利用する
+  // （ステージ6＝ステージ1のパターン、ステージ7＝ステージ2のパターン…という対応）。
+  // 各パターン関数はrows/colsを引数に取る汎用実装のため、ステージ6〜10自体の行×列サイズに
+  // 合わせて自動的に配置が計算される（配列を複製しているだけで、パターン定義自体は1つ）
   // （diamond/crossPlus/hollowCenterは図柄がシンプルすぎるとの指摘によりchevronStack/manyCrosses/meshHolesへ差し替え）
   const STAGE_PATTERNS = {
     0: [BLOCK_PATTERNS.thinDiagonal, BLOCK_PATTERNS.dotsSparse, BLOCK_PATTERNS.chevronStack],       // ステージ1（充填率 約14〜28%）
@@ -169,6 +172,13 @@
     3: [BLOCK_PATTERNS.manyCrosses, BLOCK_PATTERNS.hourglass, BLOCK_PATTERNS.triangle],             // ステージ4（約20〜67%）
     4: [BLOCK_PATTERNS.brickOffset, BLOCK_PATTERNS.horizontalStripes, BLOCK_PATTERNS.meshHoles],    // ステージ5（約75〜93%）
   };
+  // ステージ6〜10 = ステージ1〜5と同じパターン配列を再利用
+  STAGE_PATTERNS[5] = STAGE_PATTERNS[0]; // ステージ6 ＝ ステージ1と同じ
+  STAGE_PATTERNS[6] = STAGE_PATTERNS[1]; // ステージ7 ＝ ステージ2と同じ
+  STAGE_PATTERNS[7] = STAGE_PATTERNS[2]; // ステージ8 ＝ ステージ3と同じ
+  STAGE_PATTERNS[8] = STAGE_PATTERNS[3]; // ステージ9 ＝ ステージ4と同じ
+  STAGE_PATTERNS[9] = STAGE_PATTERNS[4]; // ステージ10 ＝ ステージ5と同じ
+
 
   // カスタム画像が未設定のステージ用プレースホルダー配色
   const PLACEHOLDER_COLORS = [
