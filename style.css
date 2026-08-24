@@ -112,6 +112,8 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel-inner h2 {
