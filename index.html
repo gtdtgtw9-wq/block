@@ -31,13 +31,13 @@
       <div class="panel-divider"></div>
 
       <h3 class="panel-subheading">ステージ画像</h3>
-      <div id="stageImageList" class="stage-image-list"></div>
+      <button type="button" id="openStageImageTabBtn" class="panel-button panel-button--outline">ステージ画像を変更</button>
       <input type="file" id="imageInput" accept="image/*" hidden>
 
       <div class="panel-divider"></div>
 
       <h3 class="panel-subheading">周辺装飾（マット）画像</h3>
-      <div id="matImageList" class="stage-image-list"></div>
+      <button type="button" id="openMatImageTabBtn" class="panel-button panel-button--outline">周辺装飾（マット）画像を変更</button>
       <input type="file" id="matImageInput" accept="image/*" hidden>
 
       <div class="panel-divider"></div>
@@ -77,6 +77,24 @@
     </div>
   </div>
   <div id="panelOverlay" class="hidden"></div>
+
+  <!-- 画像変更タブ：ステージ画像（グリッド一覧） -->
+  <div id="stageImageTab" class="image-tab hidden">
+    <div class="image-tab__header">
+      <button type="button" id="stageImageTabCloseBtn" class="image-tab__close" aria-label="閉じる">←</button>
+      <h2>ステージ画像</h2>
+    </div>
+    <div id="stageImageGrid" class="image-grid"></div>
+  </div>
+
+  <!-- 画像変更タブ：周辺装飾（マット）画像（グリッド一覧） -->
+  <div id="matImageTab" class="image-tab hidden">
+    <div class="image-tab__header">
+      <button type="button" id="matImageTabCloseBtn" class="image-tab__close" aria-label="閉じる">←</button>
+      <h2>周辺装飾（マット）画像</h2>
+    </div>
+    <div id="matImageGrid" class="image-grid"></div>
+  </div>
 
   <!-- ステージクリア モーダル -->
   <div id="clearModal" class="modal hidden">

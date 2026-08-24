@@ -19,10 +19,16 @@
   const resetExtra = document.getElementById('resetExtra');
   const resetImagesBtn = document.getElementById('resetImagesBtn');
   const imageInput = document.getElementById('imageInput');
-  const stageImageList = document.getElementById('stageImageList');
+  const openStageImageTabBtn = document.getElementById('openStageImageTabBtn');
+  const stageImageTab = document.getElementById('stageImageTab');
+  const stageImageTabCloseBtn = document.getElementById('stageImageTabCloseBtn');
+  const stageImageGrid = document.getElementById('stageImageGrid');
   const resetMatImagesBtn = document.getElementById('resetMatImagesBtn');
   const matImageInput = document.getElementById('matImageInput');
-  const matImageList = document.getElementById('matImageList');
+  const openMatImageTabBtn = document.getElementById('openMatImageTabBtn');
+  const matImageTab = document.getElementById('matImageTab');
+  const matImageTabCloseBtn = document.getElementById('matImageTabCloseBtn');
+  const matImageGrid = document.getElementById('matImageGrid');
   const ballShapeButtons = document.querySelectorAll('.ball-shape-btn');
   const ballColorInput = document.getElementById('ballColorInput');
 
@@ -60,8 +66,6 @@
 
   function openPanel() {
     updatePanel();
-    renderStageImageList();
-    renderMatImageList();
     updateBallShapeButtons();
     ballColorInput.value = ballColor; // パネルを開くたびに現在の選択色を反映
     collapseResetExtra(); // パネルを開くたびに展開状態はリセットしておく
@@ -102,7 +106,7 @@
     if (!ok) return;
     resetAllImages();
     ensureStageImageLoaded(stageIndex);
-    renderStageImageList();
+    renderStageImageGrid();
     collapseResetExtra();
   });
 
@@ -111,19 +115,34 @@
     if (!ok) return;
     resetAllMatImages();
     ensureMatImageLoaded(stageIndex);
-    renderMatImageList();
+    renderMatImageGrid();
     collapseResetExtra();
   });
+
+  /* ==================== 画像変更タブ（グリッド一覧、v0.30〜） ==================== */
+  function openImageTab(tabEl, renderFn) {
+    renderFn();
+    tabEl.classList.remove('hidden');
+  }
+  function closeImageTab(tabEl) {
+    tabEl.classList.add('hidden');
+  }
+
+  openStageImageTabBtn.addEventListener('click', () => openImageTab(stageImageTab, renderStageImageGrid));
+  stageImageTabCloseBtn.addEventListener('click', () => closeImageTab(stageImageTab));
+  openMatImageTabBtn.addEventListener('click', () => openImageTab(matImageTab, renderMatImageGrid));
+  matImageTabCloseBtn.addEventListener('click', () => closeImageTab(matImageTab));
 
   /* ==================== 画像差し替え(全ステージ分) ==================== */
   let uploadTargetStage = 0;
 
-  function renderStageImageList() {
-    stageImageList.innerHTML = '';
+  function renderStageImageGrid() {
+    stageImageGrid.innerHTML = '';
     STAGES.forEach((_, idx) => {
       const key = stageKey(idx);
-      const row = document.createElement('div');
-      row.className = 'stage-image-row';
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'image-grid-cell';
 
       const thumb = document.createElement('div');
       thumb.className = 'thumb';
@@ -135,22 +154,17 @@
       }
 
       const label = document.createElement('div');
-      label.className = 'thumb-label';
-      label.innerHTML = `ステージ ${idx + 1}<span class="thumb-sub">${images[key] ? '画像設定済み' : '未設定（プレースホルダー表示）'}</span>`;
+      label.className = 'label';
+      label.textContent = `ステージ ${idx + 1}`;
 
-      const btn = document.createElement('button');
-      btn.className = 'change-btn';
-      btn.type = 'button';
-      btn.textContent = '変更';
-      btn.addEventListener('click', () => {
+      cell.appendChild(thumb);
+      cell.appendChild(label);
+      cell.addEventListener('click', () => {
         uploadTargetStage = idx;
         imageInput.click();
       });
 
-      row.appendChild(thumb);
-      row.appendChild(label);
-      row.appendChild(btn);
-      stageImageList.appendChild(row);
+      stageImageGrid.appendChild(cell);
     });
   }
 
@@ -175,7 +189,7 @@
         finalImg.onload = () => { loadedImages[key] = finalImg; };
         finalImg.src = dataUrl;
 
-        renderStageImageList();
+        renderStageImageGrid();
       };
       rawImg.src = reader.result;
     };
@@ -186,12 +200,13 @@
   /* ==================== 周辺装飾（マット）画像差し替え(全ステージ分) ==================== */
   let uploadTargetMatStage = 0;
 
-  function renderMatImageList() {
-    matImageList.innerHTML = '';
+  function renderMatImageGrid() {
+    matImageGrid.innerHTML = '';
     STAGES.forEach((_, idx) => {
       const key = matKey(idx);
-      const row = document.createElement('div');
-      row.className = 'stage-image-row';
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'image-grid-cell';
 
       const thumb = document.createElement('div');
       thumb.className = 'thumb';
@@ -203,22 +218,17 @@
       }
 
       const label = document.createElement('div');
-      label.className = 'thumb-label';
-      label.innerHTML = `ステージ ${idx + 1}<span class="thumb-sub">${matImages[key] ? '画像設定済み' : '未設定（単色表示）'}</span>`;
+      label.className = 'label';
+      label.textContent = `ステージ ${idx + 1}`;
 
-      const btn = document.createElement('button');
-      btn.className = 'change-btn';
-      btn.type = 'button';
-      btn.textContent = '変更';
-      btn.addEventListener('click', () => {
+      cell.appendChild(thumb);
+      cell.appendChild(label);
+      cell.addEventListener('click', () => {
         uploadTargetMatStage = idx;
         matImageInput.click();
       });
 
-      row.appendChild(thumb);
-      row.appendChild(label);
-      row.appendChild(btn);
-      matImageList.appendChild(row);
+      matImageGrid.appendChild(cell);
     });
   }
 
@@ -243,7 +253,7 @@
         finalImg.onload = () => { loadedMatImages[key] = finalImg; };
         finalImg.src = dataUrl;
 
-        renderMatImageList();
+        renderMatImageGrid();
       };
       rawImg.src = reader.result;
     };

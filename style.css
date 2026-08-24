@@ -152,58 +152,88 @@ html, body {
   font-weight: 600;
 }
 
-.stage-image-list {
+.panel-button--outline {
+  background: transparent;
+  color: #d97757;
+  border: 1px solid rgba(217,119,87,0.5);
+}
+
+/* 画像変更タブ（グリッド一覧、v0.30〜） */
+.image-tab {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: #16181f;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 4px;
-  max-height: 34vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.stage-image-row {
+.image-tab__header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 10px;
-  padding: 8px;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex: none;
 }
 
-.stage-image-row .thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+.image-tab__header h2 {
+  color: #f4f2ec;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.image-tab__close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  color: #f4f2ec;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.image-grid {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.image-grid-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+}
+
+.image-grid-cell .thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
   background-size: cover;
   background-position: center;
   background-color: rgba(255,255,255,0.08);
-  flex: none;
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
-.stage-image-row .thumb-label {
-  flex: 1;
-  color: #f4f2ec;
-  font-size: 13px;
-}
-
-.stage-image-row .thumb-sub {
-  display: block;
-  color: #7d7b74;
-  font-size: 11px;
-  margin-top: 2px;
-}
-
-.stage-image-row .change-btn {
-  flex: none;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(217,119,87,0.5);
-  background: transparent;
-  color: #d97757;
+.image-grid-cell .label {
+  color: #cfcdc4;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .panel-button {
